@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, ShoppingCart } from 'lucide-react';
-import { MenuItem, PizzaSize } from '../types';
+import { MenuItem } from '../types';
+import type { ItemSelections } from '../store/cart.store';
 import { pastaTypes, beerTypes, drinks, saladExclusionOptions } from '../data/menuItems';
 import { useItemSelection } from '../hooks/useItemSelection';
 import { StepIndicator } from './item-modal/StepIndicator';
@@ -17,14 +18,7 @@ interface ItemModalProps {
   onClose: () => void;
   onAddToOrder: (
     menuItem: MenuItem,
-    selectedSize?: PizzaSize,
-    selectedIngredients?: string[],
-    selectedExtras?: string[],
-    selectedPastaType?: string,
-    selectedSauce?: string,
-    selectedExclusions?: string[],
-    selectedSideDish?: string,
-    selectedDrink?: string
+    selections?: ItemSelections,
   ) => void;
 }
 

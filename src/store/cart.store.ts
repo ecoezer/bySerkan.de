@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { MenuItem, OrderItem, PizzaSize } from '../types';
 
-import { MenuItem, PizzaSize } from '../types';
+// ---------------------------------------------------------------------------
+// Item Selections
+// ---------------------------------------------------------------------------
 
-interface OrderItem {
-  menuItem: MenuItem;
-  quantity: number;
+export interface ItemSelections {
   selectedSize?: PizzaSize;
   selectedIngredients?: string[];
   selectedExtras?: string[];
@@ -16,108 +17,107 @@ interface OrderItem {
   selectedDrink?: string;
 }
 
-interface CartState {
-  items: OrderItem[];
-  addItem: (menuItem: MenuItem, selectedSize?: PizzaSize, selectedIngredients?: string[], selectedExtras?: string[], selectedPastaType?: string, selectedSauce?: string, selectedExclusions?: string[], selectedSideDish?: string, selectedDrink?: string) => void;
-  removeItem: (id: number, selectedSize?: PizzaSize, selectedIngredients?: string[], selectedExtras?: string[], selectedPastaType?: string, selectedSauce?: string, selectedExclusions?: string[], selectedSideDish?: string, selectedDrink?: string) => void;
-  updateQuantity: (id: number, quantity: number, selectedSize?: PizzaSize, selectedIngredients?: string[], selectedExtras?: string[], selectedPastaType?: string, selectedSauce?: string, selectedExclusions?: string[], selectedSideDish?: string, selectedDrink?: string) => void;
-  clearCart: () => void;
+// ---------------------------------------------------------------------------
+// Key helpers
+// ---------------------------------------------------------------------------
+
+function buildItemKey(itemId: number, sel: Partial<ItemSelections>): string {
+  const parts = [
+    itemId,
+    sel.selectedSize?.name || 'default',
+    sel.selectedIngredients?.length ? [...sel.selectedIngredients].sort().join(',') : 'none',
+    sel.selectedExtras?.length ? [...sel.selectedExtras].sort().join(',') : 'none',
+    sel.selectedPastaType || 'none',
+    sel.selectedSauce || 'none',
+    sel.selectedExclusions?.length ? [...sel.selectedExclusions].sort().join(',') : 'none',
+    sel.selectedSideDish || 'none',
+    sel.selectedDrink || 'none',
+  ];
+  return parts.join('-');
 }
 
-// Helper function to create a unique key for cart items
-const getItemKey = (menuItem: MenuItem, selectedSize?: PizzaSize, selectedIngredients?: string[], selectedExtras?: string[], selectedPastaType?: string, selectedSauce?: string, selectedExclusions?: string[], selectedSideDish?: string, selectedDrink?: string) => {
-  const sizeKey = selectedSize ? selectedSize.name : 'default';
-  const ingredientsKey = selectedIngredients && selectedIngredients.length > 0
-    ? selectedIngredients.sort().join(',')
-    : 'none';
-  const extrasKey = selectedExtras && selectedExtras.length > 0
-    ? selectedExtras.sort().join(',')
-    : 'none';
-  const pastaTypeKey = selectedPastaType || 'none';
-  const sauceKey = selectedSauce || 'none';
-  const exclusionsKey = selectedExclusions && selectedExclusions.length > 0
-    ? selectedExclusions.sort().join(',')
-    : 'none';
-  const sideDishKey = selectedSideDish || 'none';
-  const drinkKey = selectedDrink || 'none';
-  return `${menuItem.id}-${sizeKey}-${ingredientsKey}-${extrasKey}-${pastaTypeKey}-${sauceKey}-${exclusionsKey}-${sideDishKey}-${drinkKey}`;
-};
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
 
-// Helper function to find item in cart
-const findItemIndex = (items: OrderItem[], menuItem: MenuItem, selectedSize?: PizzaSize, selectedIngredients?: string[], selectedExtras?: string[], selectedPastaType?: string, selectedSauce?: string, selectedExclusions?: string[], selectedSideDish?: string, selectedDrink?: string) => {
-  return items.findIndex(item => {
-    const itemKey = getItemKey(item.menuItem, item.selectedSize, item.selectedIngredients, item.selectedExtras, item.selectedPastaType, item.selectedSauce, item.selectedExclusions, item.selectedSideDish, item.selectedDrink);
-    const searchKey = getItemKey(menuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
-    return itemKey === searchKey;
-  });
-};
+interface CartState {
+  items: OrderItem[];
+  addItem: (menuItem: MenuItem, selections?: ItemSelections) => void;
+  removeItem: (id: number, selections?: ItemSelections) => void;
+  updateQuantity: (id: number, quantity: number, selections?: ItemSelections) => void;
+  clearCart: () => void;
+  totalItems: () => number;
+  totalPrice: () => number;
+}
 
 export const useCartStore = create<CartState>()(
   persist(
-    set => ({
+    (set, get) => ({
       items: [],
 
-      addItem: (menuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink) =>
+      addItem: (menuItem, sel = {}) =>
         set(state => {
           const currentItems = [...state.items];
-          const existingItemIndex = findItemIndex(currentItems, menuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
+          // Determine key based on input selections
+          const newKey = buildItemKey(menuItem.id, sel);
 
-          if (existingItemIndex >= 0) {
-            currentItems[existingItemIndex] = {
-              ...currentItems[existingItemIndex],
-              quantity: currentItems[existingItemIndex].quantity + 1
+          // Check if item already exists by generating key for each existing item
+          const existingIndex = currentItems.findIndex(i => buildItemKey(i.menuItem.id, i) === newKey);
+
+          if (existingIndex >= 0) {
+            currentItems[existingIndex] = {
+              ...currentItems[existingIndex],
+              quantity: currentItems[existingIndex].quantity + 1,
             };
           } else {
             currentItems.push({
-              menuItem: menuItem,
+              menuItem,
               quantity: 1,
-              selectedSize,
-              selectedIngredients: selectedIngredients || [],
-              selectedExtras: selectedExtras || [],
-              selectedPastaType,
-              selectedSauce,
-              selectedExclusions: selectedExclusions || [],
-              selectedSideDish,
-              selectedDrink
+              ...sel, // Spread selections directly
+              // Ensure arrays are at least empty arrays if undefined
+              selectedIngredients: sel.selectedIngredients || [],
+              selectedExtras: sel.selectedExtras || [],
+              selectedExclusions: sel.selectedExclusions || [],
             });
           }
 
           return { items: currentItems };
         }),
 
-      removeItem: (id, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink) =>
-        set(state => ({
-          items: state.items.filter(item => {
-            const itemKey = getItemKey(item.menuItem, item.selectedSize, item.selectedIngredients, item.selectedExtras, item.selectedPastaType, item.selectedSauce, item.selectedExclusions, item.selectedSideDish, item.selectedDrink);
-            const searchKey = getItemKey({ id } as MenuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
-            return itemKey !== searchKey;
-          })
-        })),
-
-      updateQuantity: (id, quantity, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink) =>
+      removeItem: (id, sel = {}) =>
         set(state => {
+          const searchKey = buildItemKey(id, sel);
+          return {
+            items: state.items.filter(item => buildItemKey(item.menuItem.id, item) !== searchKey),
+          };
+        }),
+
+      updateQuantity: (id, quantity, sel = {}) =>
+        set(state => {
+          const searchKey = buildItemKey(id, sel);
+
           if (quantity <= 0) {
             return {
-              items: state.items.filter(item => {
-                const itemKey = getItemKey(item.menuItem, item.selectedSize, item.selectedIngredients, item.selectedExtras, item.selectedPastaType, item.selectedSauce, item.selectedExclusions, item.selectedSideDish, item.selectedDrink);
-                const searchKey = getItemKey({ id } as MenuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
-                return itemKey !== searchKey;
-              })
+              items: state.items.filter(item => buildItemKey(item.menuItem.id, item) !== searchKey),
             };
           }
 
           return {
-            items: state.items.map(item => {
-              const itemKey = getItemKey(item.menuItem, item.selectedSize, item.selectedIngredients, item.selectedExtras, item.selectedPastaType, item.selectedSauce, item.selectedExclusions, item.selectedSideDish, item.selectedDrink);
-              const searchKey = getItemKey({ id } as MenuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
-              return itemKey === searchKey ? { ...item, quantity } : item;
-            })
+            items: state.items.map(item =>
+              buildItemKey(item.menuItem.id, item) === searchKey ? { ...item, quantity } : item
+            ),
           };
         }),
 
       clearCart: () => set({ items: [] }),
-      
-      resetStore: () => set({ items: [] })
+
+      totalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+
+      totalPrice: () =>
+        get().items.reduce((sum, item) => {
+          const basePrice = item.selectedSize?.price ?? item.menuItem.price;
+          return sum + basePrice * item.quantity;
+        }, 0),
     }),
     { name: 'cart-storage' }
   )

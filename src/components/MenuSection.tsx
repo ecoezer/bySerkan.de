@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { Plus, ChefHat, Clock, Star } from 'lucide-react';
-import { MenuItem, PizzaSize } from '../types';
+import { MenuItem } from '../types';
+import type { ItemSelections } from '../store/cart.store';
 import ItemModal from './ItemModal';
+import { isConfigurableItem } from '../utils/menuHelper';
 
 interface MenuSectionProps {
   title: string;
@@ -11,14 +13,7 @@ interface MenuSectionProps {
   bgColor?: string;
   onAddToOrder: (
     menuItem: MenuItem,
-    selectedSize?: PizzaSize,
-    selectedIngredients?: string[],
-    selectedExtras?: string[],
-    selectedPastaType?: string,
-    selectedSauce?: string,
-    selectedExclusions?: string[],
-    selectedSideDish?: string,
-    selectedDrink?: string
+    selections?: ItemSelections,
   ) => void;
 }
 
@@ -28,9 +23,7 @@ const MenuSection: React.FC<MenuSectionProps> = ({ title, description, subTitle,
   const today = new Date().getDay();
 
   const handleItemClick = useCallback((item: MenuItem) => {
-    const needsConfig = item.sizes || item.isWunschPizza || item.isPizza || item.isPasta ||
-      item.isBeerSelection || item.isMeatSelection || (item.isSpezialitaet && ![81, 82].includes(item.id) && !item.isMeatSelection) ||
-      (item.id >= 568 && item.id <= 573 && item.isSpezialitaet);
+    const needsConfig = isConfigurableItem(item);
 
     if (needsConfig) {
       setSelectedItem(item);
@@ -58,7 +51,7 @@ const MenuSection: React.FC<MenuSectionProps> = ({ title, description, subTitle,
         {items.map((item, i) => {
           const isRippchenSpecial = item.id === 84 && today === 3;
           const isSchnitzelSpecial = [546, 547, 548, 549].includes(item.id) && today === 4;
-          const hasSizes = item.sizes?.length > 0;
+          const hasSizes = item.sizes && item.sizes.length > 0;
           const minPrice = item.sizes ? Math.min(...item.sizes.map(s => s.price)) : item.price;
 
           return (

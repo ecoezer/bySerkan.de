@@ -116,14 +116,8 @@ export const drehspiessKalb: readonly MenuItem[] = [
   }
 ];
 
-// Re-exporting empty arrays for other categories for now, as they were wiped
-export const pizzas: readonly MenuItem[] = [];
-export const snacks: readonly MenuItem[] = [];
-export const vegetarischeGerichte: readonly MenuItem[] = [];
-export const croques: readonly MenuItem[] = [];
-export const salads: readonly MenuItem[] = [];
-export const dips: readonly MenuItem[] = [];
-export const drinks: readonly MenuItem[] = [];
+// Drinks data (populated dynamically; kept as typed empty array for compile-time safety)
+export const drinks: readonly { id: number; name: string; description?: string }[] = [];
 
 // Configuration Arrays
 export const sauceTypes = [

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import Header from '../components/Header';
+
 import MenuSection from '../components/MenuSection';
 import Footer from '../components/Footer';
 import Navigation from '../components/Navigation';
@@ -7,13 +7,17 @@ import OrderForm from '../components/OrderForm';
 import SearchBar from '../components/SearchBar';
 import PopularItemsSection from '../components/PopularItemsSection';
 import { useCartStore } from '../store/cart.store';
+import type { ItemSelections } from '../store/cart.store';
 import { ShoppingCart, ChevronUp, ChevronDown, X } from 'lucide-react';
 import { useMenuData } from '../hooks/useMenuData';
-import { getStoreSettings, isStoreOpen } from '../services/settingsService';
 import { Notification } from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 import { StoreClosedModal } from '../components/StoreClosedModal';
 import { MenuItem, PizzaSize } from '../types';
 import ItemModal from '../components/ItemModal';
+import { isConfigurableItem } from '../utils/menuHelper';
+
+import { useStoreStatus } from '../hooks/useStoreStatus';
 
 const SCROLL_CONFIG = {
   DELAY: 100,
@@ -42,8 +46,10 @@ function HomePage() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cartAnimation, setCartAnimation] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [storeStatus, setStoreStatus] = useState<{ isOpen: boolean; message?: string; deliveryMessage?: string; nextOpen?: string; nextDeliveryOpen?: string }>({ isOpen: true });
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  // Use centralized store status hook
+  const { storeStatus } = useStoreStatus();
+
+  const { notification, clearNotification } = useNotification();
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [pendingItem, setPendingItem] = useState<{
@@ -58,14 +64,6 @@ function HomePage() {
     drink?: string;
   } | null>(null);
 
-  useEffect(() => {
-    const checkStoreStatus = async () => {
-      const settings = await getStoreSettings();
-      const status = isStoreOpen(settings);
-      setStoreStatus(status);
-    };
-    checkStoreStatus();
-  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < SCROLL_CONFIG.MOBILE_BREAKPOINT);
@@ -79,7 +77,7 @@ function HomePage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const totalItemsCount = useMemo(() => items.reduce((sum, item) => sum + item.quantity, 0), [items]);
+  const totalItemsCount = useCartStore(state => state.totalItems());
 
   const triggerCartAnimation = useCallback(() => {
     setCartAnimation(true);
@@ -89,31 +87,24 @@ function HomePage() {
 
   const memoizedAddItem = useCallback((
     menuItem: MenuItem,
-    selectedSize?: PizzaSize,
-    selectedIngredients?: string[],
-    selectedExtras?: string[],
-    selectedPastaType?: string,
-    selectedSauce?: string,
-    selectedExclusions?: string[],
-    selectedSideDish?: string,
-    selectedDrink?: string
+    selections: ItemSelections = {}
   ) => {
     if (!storeStatus.isOpen) {
       setPendingItem({
         item: menuItem,
-        size: selectedSize,
-        ingredients: selectedIngredients,
-        extras: selectedExtras,
-        pastaType: selectedPastaType,
-        sauce: selectedSauce,
-        exclusions: selectedExclusions,
-        sideDish: selectedSideDish,
-        drink: selectedDrink
+        size: selections.selectedSize,
+        ingredients: selections.selectedIngredients,
+        extras: selections.selectedExtras,
+        pastaType: selections.selectedPastaType,
+        sauce: selections.selectedSauce,
+        exclusions: selections.selectedExclusions,
+        sideDish: selections.selectedSideDish,
+        drink: selections.selectedDrink,
       });
       setShowClosedModal(true);
       return;
     }
-    addItem(menuItem, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedExclusions, selectedSideDish, selectedDrink);
+    addItem(menuItem, selections);
     setSearchQuery('');
     triggerCartAnimation();
   }, [addItem, triggerCartAnimation, storeStatus]);
@@ -126,10 +117,8 @@ function HomePage() {
       return;
     }
 
-    // Check if item needs configuration (logic copied from MenuSection to ensure consistency)
-    const needsConfig = item.sizes || item.isWunschPizza || item.isPizza || item.isPasta ||
-      item.isBeerSelection || item.isMeatSelection || (item.isSpezialitaet && ![81, 82].includes(item.id) && !item.isMeatSelection) ||
-      (item.id >= 568 && item.id <= 573 && item.isSpezialitaet);
+    // Check if item needs configuration (using central helper)
+    const needsConfig = isConfigurableItem(item);
 
     if (needsConfig) {
       setSelectedPopularItem(item);
@@ -205,13 +194,13 @@ function HomePage() {
     <div className='min-h-dvh bg-gray-50'>
       <div className='fixed top-0 left-0 right-0 z-50 bg-white shadow-sm'>
         <div className="bg-white py-3">
-          <div className="container mx-auto px-4 max-w-7xl lg:pr-80 flex items-center gap-4">
+          <div className="mx-auto px-4 lg:pr-80 flex items-center gap-4">
             {!isSearchFocused && (
-              <div className="flex items-center gap-3 transition-all duration-300 border-r border-gray-100 pr-4">
+              <div className="flex items-center gap-3 transition-all duration-300 pr-4">
                 <img
                   src="/logo.png"
                   alt="Logo"
-                  className={`${isMobile ? 'h-8' : 'h-10'} w-auto object-contain rounded shadow-sm`}
+                  className={`${isMobile ? 'h-8' : 'h-10'} w-auto object-contain`}
                 />
               </div>
             )}
@@ -234,7 +223,7 @@ function HomePage() {
 
 
       <div className='pt-32 lg:pr-80'>
-        <Header />
+
         <main className='container mx-auto px-6 py-6 max-w-5xl'>
 
           {/* Search Result Handling */}
@@ -355,9 +344,7 @@ function HomePage() {
           if (pendingItem) {
             // If it was just an item selection (needs config), open the modal for it
             const item = pendingItem.item;
-            const needsConfig = item.sizes || item.isWunschPizza || item.isPizza || item.isPasta ||
-              item.isBeerSelection || item.isMeatSelection || (item.isSpezialitaet && ![81, 82].includes(item.id) && !item.isMeatSelection) ||
-              (item.id >= 568 && item.id <= 573 && item.isSpezialitaet);
+            const needsConfig = isConfigurableItem(item);
 
             if (needsConfig && !pendingItem.size && !pendingItem.ingredients) {
               setSelectedPopularItem(item);
@@ -365,14 +352,16 @@ function HomePage() {
               // Directly add if it's already configured or doesn't need config
               addItem(
                 item,
-                pendingItem.size,
-                pendingItem.ingredients,
-                pendingItem.extras,
-                pendingItem.pastaType,
-                pendingItem.sauce,
-                pendingItem.exclusions,
-                pendingItem.sideDish,
-                pendingItem.drink
+                {
+                  selectedSize: pendingItem.size,
+                  selectedIngredients: pendingItem.ingredients,
+                  selectedExtras: pendingItem.extras,
+                  selectedPastaType: pendingItem.pastaType,
+                  selectedSauce: pendingItem.sauce,
+                  selectedExclusions: pendingItem.exclusions,
+                  selectedSideDish: pendingItem.sideDish,
+                  selectedDrink: pendingItem.drink,
+                }
               );
               triggerCartAnimation();
               if (isMobile) setShowMobileCart(true);
@@ -388,7 +377,7 @@ function HomePage() {
         <Notification
           message={notification.message}
           type={notification.type}
-          onClose={() => setNotification(null)}
+          onClose={clearNotification}
         />
       )}
     </div>

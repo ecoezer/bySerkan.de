@@ -1,21 +1,21 @@
 import { useState, useCallback } from 'react';
 import { MenuItem, PizzaSize } from '../types';
+import type { ItemSelections } from '../store/cart.store';
 import {
-    sauceTypes, saladSauceTypes, pommesSauceTypes, meatTypes, saladExclusionOptions, sideDishOptions, pastaTypes
+    meatTypes, sideDishOptions, pastaTypes, saladExclusionOptions
 } from '../data/menuItems';
+import {
+    isDrehspiessTeller,
+    isExcludedFromMeatSauceStep,
+    getAvailableSauces,
+    shouldShowLimitedSauces
+} from '../utils/menuHelper';
 
 interface UseItemSelectionProps {
     item: MenuItem;
     onAddToOrder: (
         menuItem: MenuItem,
-        selectedSize?: PizzaSize,
-        selectedIngredients?: string[],
-        selectedExtras?: string[],
-        selectedPastaType?: string,
-        selectedSauce?: string,
-        selectedExclusions?: string[],
-        selectedSideDish?: string,
-        selectedDrink?: string
+        selections?: ItemSelections,
     ) => void;
     onClose: () => void;
 }
@@ -36,7 +36,7 @@ export const useItemSelection = ({ item, onAddToOrder, onClose }: UseItemSelecti
     const [selectedSauces, setSelectedSauces] = useState<string[]>([]);
     const [selectedExclusions, setSelectedExclusions] = useState<string[]>([]);
     const [selectedSideDish, setSelectedSideDish] = useState<string>(
-        (item.number === 4 || item.hasSideDishSelection) ? sideDishOptions[0] : ''
+        (isDrehspiessTeller(item) || item.hasSideDishSelection) ? sideDishOptions[0] : ''
     );
     const [selectedDrink, setSelectedDrink] = useState<string>('');
     const [currentStep, setCurrentStep] = useState<'meat' | 'sauce' | 'exclusions' | 'sidedish' | 'complete'>('meat');
@@ -106,19 +106,19 @@ export const useItemSelection = ({ item, onAddToOrder, onClose }: UseItemSelecti
 
     const handleAddToCart = useCallback(() => {
         // For meat selection items that are NOT pizzas or croques, check if we need to go to sauce selection step
-        if (item.isMeatSelection && !item.isPizza && ![61].includes(item.number) && currentStep === 'meat') {
+        if (item.isMeatSelection && !item.isPizza && !isExcludedFromMeatSauceStep(item) && currentStep === 'meat') {
             setCurrentStep('sauce');
             return;
         }
 
         // For meat selection items, check if we need to go to exclusions step
-        if (item.isMeatSelection && !item.isPizza && ![61].includes(item.number) && currentStep === 'sauce') {
+        if (item.isMeatSelection && !item.isPizza && !isExcludedFromMeatSauceStep(item) && currentStep === 'sauce') {
             setCurrentStep('exclusions');
             return;
         }
 
         // For item #4 (Drehspieß Teller), check if we need to go to side dish selection step
-        if (item.number === 4 && item.isMeatSelection && currentStep === 'exclusions') {
+        if (isDrehspiessTeller(item) && item.isMeatSelection && currentStep === 'exclusions') {
             setCurrentStep('sidedish');
             return;
         }
@@ -129,38 +129,31 @@ export const useItemSelection = ({ item, onAddToOrder, onClose }: UseItemSelecti
 
         onAddToOrder(
             item,
-            selectedSize,
-            selectedIngredients,
-            selectedExtras,
-            selectedPastaType || undefined,
-            finalSauce,
-            selectedExclusions,
-            selectedSideDish || undefined,
-            selectedDrink || undefined
+            {
+                selectedSize,
+                selectedIngredients,
+                selectedExtras,
+                selectedPastaType: selectedPastaType || undefined,
+                selectedSauce: finalSauce,
+                selectedExclusions,
+                selectedSideDish: selectedSideDish || undefined,
+                selectedDrink: selectedDrink || undefined,
+            }
         );
         onClose();
     }, [item, selectedSize, selectedIngredients, selectedExtras, selectedPastaType, selectedSauce, selectedSauces, selectedMeatType, selectedExclusions, selectedSideDish, selectedDrink, onAddToOrder, onClose, currentStep]);
 
     const getSauceOptions = useCallback(() => {
-        if (item.id >= 568 && item.id <= 573 && item.isSpezialitaet) {
-            return saladSauceTypes;
-        }
-        if (item.number === 17) {
-            return pommesSauceTypes;
-        }
-        if ([11, 12, 13, 14, 15].includes(item.number)) {
-            return (sauceTypes as readonly string[]).filter(sauce => !['Tzatziki', 'Kräutersoße', 'Curry Sauce'].includes(sauce)).concat(['Burger Sauce']).sort();
-        }
-        return sauceTypes;
-    }, [item.id, item.number, item.isSpezialitaet]);
+        return getAvailableSauces(item);
+    }, [item]);
 
     const getVisibleSauceOptions = useCallback(() => {
         const allSauces = getSauceOptions();
-        if ((item.isMeatSelection && currentStep === 'sauce') || item.isMultipleSauceSelection || [6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18].includes(item.number)) {
+        if (shouldShowLimitedSauces(item, currentStep)) {
             return showAllSauces ? allSauces : allSauces.slice(0, 3);
         }
         return allSauces;
-    }, [getSauceOptions, item.isMeatSelection, item.isMultipleSauceSelection, item.number, currentStep, showAllSauces]);
+    }, [getSauceOptions, item, currentStep, showAllSauces]);
 
     const getVisibleExclusionOptions = useCallback(() => {
         if (item.isMeatSelection && currentStep === 'exclusions') {
@@ -185,7 +178,7 @@ export const useItemSelection = ({ item, onAddToOrder, onClose }: UseItemSelecti
     }, []);
 
     const getModalTitle = useCallback(() => {
-        if (item.isMeatSelection && !item.isPizza && ![61].includes(item.number)) {
+        if (item.isMeatSelection && !item.isPizza && !isExcludedFromMeatSauceStep(item)) {
             if (currentStep === 'meat') {
                 return 'Schritt 1: Fleischauswahl';
             } else if (currentStep === 'sauce') {
@@ -200,11 +193,11 @@ export const useItemSelection = ({ item, onAddToOrder, onClose }: UseItemSelecti
     }, [item, currentStep]);
 
     const getButtonText = useCallback(() => {
-        if (item.isMeatSelection && !item.isPizza && ![61].includes(item.number) && currentStep === 'meat') {
+        if (item.isMeatSelection && !item.isPizza && !isExcludedFromMeatSauceStep(item) && currentStep === 'meat') {
             return 'Weiter zur Soßenauswahl';
-        } else if (item.isMeatSelection && !item.isPizza && ![61].includes(item.number) && currentStep === 'sauce') {
+        } else if (item.isMeatSelection && !item.isPizza && !isExcludedFromMeatSauceStep(item) && currentStep === 'sauce') {
             return 'Weiter zur Salat-Anpassung';
-        } else if (item.number === 4 && item.isMeatSelection && currentStep === 'exclusions') {
+        } else if (isDrehspiessTeller(item) && item.isMeatSelection && currentStep === 'exclusions') {
             return 'Weiter zur Beilagenauswahl';
         }
         return `Hinzufügen - ${calculatePrice().toFixed(2).replace('.', ',')} €`;

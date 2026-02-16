@@ -31,21 +31,6 @@ export interface PizzaSize {
   description?: string;
 }
 
-export type SelectedSize = PizzaSize;
-
-export interface PizzaExtra {
-  name: string;
-  price: number;
-}
-
-export interface PastaType {
-  name: string;
-}
-
-export interface SauceType {
-  name: string;
-}
-
 export interface OrderItem {
   menuItem: MenuItem;
   quantity: number;
@@ -57,6 +42,7 @@ export interface OrderItem {
   selectedSauces?: string[];
   selectedSideDish?: string;
   selectedExclusions?: string[];
+  selectedDrink?: string;
 }
 
 export interface CustomerInfo {
@@ -64,11 +50,6 @@ export interface CustomerInfo {
   address: string;
   phone: string;
   note?: string;
-}
-
-export interface WunschPizzaIngredient {
-  name: string;
-  disabled?: boolean;
 }
 
 export interface Order {
@@ -129,4 +110,96 @@ export interface SupabaseOrderRow {
   ip_address?: string;
   monitor_status?: 'new' | 'accepted' | 'closed';
   updated_at?: string;
+}
+
+export interface CategoryRow {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  order: number;
+}
+
+export interface MenuItemRow {
+  id: string;
+  category_id?: string;
+  category_slug?: string;
+  number: number;
+  name: string;
+  description: string;
+  price: string; // Supabase returns numeric/decimal as string usually? Or number? menuService parses it: parseFloat(item.price)
+  allergens: string;
+  sizes: PizzaSize[];
+  is_wunsch_pizza: boolean;
+  is_pizza: boolean;
+  is_pasta: boolean;
+  is_spezialitaet: boolean;
+  is_beer_selection: boolean;
+  is_meat_selection: boolean;
+  is_multiple_sauce_selection: boolean;
+  has_side_dish_selection: boolean;
+  order_count: number;
+}
+
+export type TimePeriod = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'all';
+
+export interface Analytics {
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrder: number;
+  pickupVsDelivery: { pickup: number; delivery: number };
+  topProducts: Array<{ name: string; quantity: number; revenue: number; percentage: number }>;
+  deviceStats: {
+    mobile: number;
+    desktop: number;
+    ios: number;
+    android: number;
+  };
+  browsers: Array<{ name: string; count: number }>;
+  peakHours: Array<{ hour: string; orders: number; revenue: number }>;
+  deliveryZones: Array<{ zone: string; orders: number; revenue: number; avgOrder: number }>;
+  dailyTrend: Array<{ date: string; orders: number; revenue: number }>;
+}
+
+export interface DaySchedule {
+  isOpen: boolean;
+  open: string;
+  close: string;
+}
+
+export interface WeekSchedule {
+  monday: DaySchedule;
+  tuesday: DaySchedule;
+  wednesday: DaySchedule;
+  thursday: DaySchedule;
+  friday: DaySchedule;
+  saturday: DaySchedule;
+  sunday: DaySchedule;
+}
+
+export interface AddressSettings {
+  street: string;
+  city: string;
+  zip: string;
+  phone: string;
+}
+
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  zipCode: string;
+  minOrder: number;
+  deliveryFee: number;
+}
+
+export interface StoreSettings {
+  isOpen: boolean;
+  isDeliveryAvailable: boolean;
+  isPickupAvailable: boolean;
+  pausedDateDelivery?: string | null;
+  pausedDatePickup?: string | null;
+  schedule: WeekSchedule;
+  deliverySchedule: WeekSchedule;
+  address: AddressSettings;
+  deliveryZones: DeliveryZone[];
 }

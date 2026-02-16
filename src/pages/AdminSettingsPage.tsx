@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Clock, Power, ShieldAlert, MapPin, Plus, Trash2, Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { getStoreSettings, updateStoreSettings, StoreSettings, DEFAULT_SETTINGS, DEFAULT_SCHEDULE, WeekSchedule, DeliveryZone } from '../services/settingsService';
+import { getStoreSettings, updateStoreSettings, DEFAULT_SETTINGS, DEFAULT_SCHEDULE } from '../services/settingsService';
+import type { StoreSettings, WeekSchedule, DeliveryZone } from '../types';
 import { cleanupDuplicateCategories } from '../services/cleanupService';
 import { Notification } from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const SettingsSection = ({
@@ -52,6 +54,81 @@ const SettingsSection = ({
     );
 };
 
+const WeeklyScheduleEditor = ({
+    schedule,
+    onToggleDay,
+    onTimeChange,
+    labels = { active: 'Geöffnet', inactive: 'Ruhetag' },
+    colors = { checkbox: 'bg-orange-500', border: 'border-orange-500' }
+}: {
+    schedule: WeekSchedule;
+    onToggleDay: (day: keyof WeekSchedule) => void;
+    onTimeChange: (day: keyof WeekSchedule, field: 'open' | 'close', value: string) => void;
+    labels?: { active: string; inactive: string };
+    colors?: { checkbox: string; border: string; };
+}) => {
+    const days: (keyof WeekSchedule)[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const germanDays: Record<string, string> = {
+        monday: 'Montag', tuesday: 'Dienstag', wednesday: 'Mittwoch', thursday: 'Donnerstag',
+        friday: 'Freitag', saturday: 'Samstag', sunday: 'Sonntag'
+    };
+
+    return (
+        <div className="space-y-4">
+            {days.map(day => {
+                const daySchedule = schedule[day];
+                // Safety check if daySchedule is undefined
+                if (!daySchedule) return null;
+                const isOpen = daySchedule.isOpen;
+
+                return (
+                    <div key={day} className={`flex items-center justify-between p-4 rounded-lg transition-colors ${isOpen ? 'bg-[#1a2332]' : 'bg-[#1a2332]/50 border border-red-900/30'}`}>
+                        <div className="flex items-center gap-4 w-48 group cursor-pointer" onClick={() => onToggleDay(day)}>
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isOpen ? `${colors.checkbox} ${colors.border}` : 'bg-gray-700 border-gray-600'}`}>
+                                {isOpen && <div className="w-2 h-2 bg-white rounded-sm" />}
+                            </div>
+                            <div className="flex flex-col">
+                                <span className={`text-white capitalize font-medium ${!isOpen && 'text-gray-500'}`}>{germanDays[day]}</span>
+                                <span className={`text-xs ${isOpen ? 'text-green-400' : 'text-red-400 font-bold'}`}>
+                                    {isOpen ? labels.active : labels.inactive}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 flex-1 justify-end">
+                            {isOpen ? (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 text-sm w-8">Von</span>
+                                        <input
+                                            type="time"
+                                            value={daySchedule.open}
+                                            onChange={(e) => onTimeChange(day, 'open', e.target.value)}
+                                            className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-orange-500 outline-none hover:bg-gray-600 transition-colors"
+                                        />
+                                    </div>
+                                    <span className="text-gray-500">-</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-gray-400 text-sm w-8">Bis</span>
+                                        <input
+                                            type="time"
+                                            value={daySchedule.close}
+                                            onChange={(e) => onTimeChange(day, 'close', e.target.value)}
+                                            className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-orange-500 outline-none hover:bg-gray-600 transition-colors"
+                                        />
+                                    </div>
+                                </>
+                            ) : (
+                                <span className="text-red-400 font-medium italic pr-12">{labels.inactive} (Geschlossen)</span>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 const AdminSettingsPage: React.FC = () => {
     const navigate = useNavigate();
     const [settings, setSettings] = useState<StoreSettings>(DEFAULT_SETTINGS);
@@ -60,7 +137,7 @@ const AdminSettingsPage: React.FC = () => {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const { notification, showSuccess, showError, clearNotification } = useNotification();
     const [editingZone, setEditingZone] = useState<DeliveryZone | null>(null);
     const [isZoneModalOpen, setIsZoneModalOpen] = useState(false);
     const [zoneToDelete, setZoneToDelete] = useState<string | null>(null);
@@ -80,31 +157,30 @@ const AdminSettingsPage: React.FC = () => {
     const toggleSection = (section: string) => {
         setActiveSection(prev => prev === section ? null : section);
     };
-
-    useEffect(() => {
-        loadSettings();
-    }, []);
-
-    const loadSettings = async () => {
+    const loadSettings = useCallback(async () => {
         try {
             setLoading(true);
             const data = await getStoreSettings();
             setSettings(data);
         } catch (error) {
             console.error('Failed to load settings', error);
-            setNotification({ message: 'Einstellungen konnten nicht geladen werden', type: 'error' });
+            showError('Einstellungen konnten nicht geladen werden');
         } finally {
             setLoading(false);
         }
-    };
+    }, [showError]);
+
+    useEffect(() => {
+        loadSettings();
+    }, [loadSettings]);
 
     const handleSave = async () => {
         setSaving(true);
         try {
             await updateStoreSettings(settings);
-            setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
+            showSuccess('Einstellungen erfolgreich gespeichert!');
         } catch {
-            setNotification({ message: 'Fehler beim Speichern', type: 'error' });
+            showError('Fehler beim Speichern');
         } finally {
             setSaving(false);
         }
@@ -167,12 +243,13 @@ const AdminSettingsPage: React.FC = () => {
         setLoading(true);
         try {
             const result = await cleanupDuplicateCategories();
-            setNotification({
-                message: result.message,
-                type: result.success ? 'success' : 'error'
-            });
+            if (result.success) {
+                showSuccess(result.message);
+            } else {
+                showError(result.message);
+            }
         } catch {
-            setNotification({ message: 'Reparatur fehlgeschlagen', type: 'error' });
+            showError('Reparatur fehlgeschlagen');
         } finally {
             setLoading(false);
         }
@@ -195,51 +272,13 @@ const AdminSettingsPage: React.FC = () => {
             </span>
         </div>
 
-        <div className="space-y-4">
-            {days.map(day => (
-                <div key={day} className={`flex items-center justify-between p-4 rounded-lg transition-colors ${settings.schedule[day].isOpen ? 'bg-[#1a2332]' : 'bg-[#1a2332]/50 border border-red-900/30'}`}>
-                    <div className="flex items-center gap-4 w-48 group cursor-pointer" onClick={() => toggleDayOpen(day)}>
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${settings.schedule[day].isOpen ? 'bg-orange-500 border-orange-500' : 'bg-gray-700 border-gray-600'}`}>
-                            {settings.schedule[day].isOpen && <div className="w-2 h-2 bg-white rounded-sm" />}
-                        </div>
-                        <div className="flex flex-col">
-                            <span className={`text-white capitalize font-medium ${!settings.schedule[day].isOpen && 'text-gray-500'}`}>{germanDays[day]}</span>
-                            <span className={`text-xs ${settings.schedule[day].isOpen ? 'text-green-400' : 'text-red-400 font-bold'}`}>
-                                {settings.schedule[day].isOpen ? 'Geöffnet' : 'Ruhetag'}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 flex-1 justify-end">
-                        {settings.schedule[day].isOpen ? (
-                            <>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-400 text-sm w-8">Von</span>
-                                    <input
-                                        type="time"
-                                        value={settings.schedule[day].open}
-                                        onChange={(e) => handleScheduleChange(day, 'open', e.target.value)}
-                                        className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-orange-500 outline-none hover:bg-gray-600 transition-colors"
-                                    />
-                                </div>
-                                <span className="text-gray-500">-</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-gray-400 text-sm w-8">Bis</span>
-                                    <input
-                                        type="time"
-                                        value={settings.schedule[day].close}
-                                        onChange={(e) => handleScheduleChange(day, 'close', e.target.value)}
-                                        className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-orange-500 outline-none hover:bg-gray-600 transition-colors"
-                                    />
-                                </div>
-                            </>
-                        ) : (
-                            <span className="text-red-400 font-medium italic pr-12">Ruhetag (Geschlossen)</span>
-                        )}
-                    </div>
-                </div>
-            ))}
-        </div>
+        <WeeklyScheduleEditor
+            schedule={settings.schedule}
+            onToggleDay={toggleDayOpen}
+            onTimeChange={handleScheduleChange}
+            labels={{ active: 'Geöffnet', inactive: 'Ruhetag' }}
+            colors={{ checkbox: 'bg-orange-500', border: 'border-orange-500' }}
+        />
     </SettingsSection>
 
 
@@ -256,7 +295,7 @@ const AdminSettingsPage: React.FC = () => {
             deliveryZones: prev.deliveryZones.filter(z => z.id !== zoneToDelete)
         }));
         setZoneToDelete(null);
-        setNotification({ message: 'Liefergebiet gelöscht', type: 'success' });
+        showSuccess('Liefergebiet gelöscht');
     };
 
     const handleSaveZone = () => {
@@ -641,57 +680,15 @@ const AdminSettingsPage: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        {(settings.deliverySchedule || DEFAULT_SCHEDULE) && days.map(day => {
-                            // Fallback to default if individual day is missing (safety check)
-                            const daySchedule = settings.deliverySchedule?.[day] || DEFAULT_SCHEDULE[day];
-                            const isOpen = daySchedule.isOpen;
-
-                            return (
-                                <div key={day} className={`flex items-center justify-between p-4 rounded-lg transition-colors ${isOpen ? 'bg-[#1a2332]' : 'bg-[#1a2332]/50 border border-red-900/30'}`}>
-                                    <div className="flex items-center gap-4 w-48 group cursor-pointer" onClick={() => toggleDeliveryDayOpen(day)}>
-                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isOpen ? 'bg-blue-500 border-blue-500' : 'bg-gray-700 border-gray-600'}`}>
-                                            {isOpen && <div className="w-2 h-2 bg-white rounded-sm" />}
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className={`text-white capitalize font-medium ${!isOpen && 'text-gray-500'}`}>{germanDays[day]}</span>
-                                            <span className={`text-xs ${isOpen ? 'text-green-400' : 'text-red-400 font-bold'}`}>
-                                                {isOpen ? 'Lieferung' : 'Keine Lieferung'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 flex-1 justify-end">
-                                        {isOpen ? (
-                                            <>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-gray-400 text-sm w-8">Von</span>
-                                                    <input
-                                                        type="time"
-                                                        value={daySchedule.open}
-                                                        onChange={(e) => handleDeliveryScheduleChange(day, 'open', e.target.value)}
-                                                        className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none hover:bg-gray-600 transition-colors"
-                                                    />
-                                                </div>
-                                                <span className="text-gray-500">-</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-gray-400 text-sm w-8">Bis</span>
-                                                    <input
-                                                        type="time"
-                                                        value={daySchedule.close}
-                                                        onChange={(e) => handleDeliveryScheduleChange(day, 'close', e.target.value)}
-                                                        className="bg-gray-700 text-white rounded px-3 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none hover:bg-gray-600 transition-colors"
-                                                    />
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <span className="text-red-400 font-medium italic pr-12">Keine Lieferung</span>
-                                        )}
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
+                    {(settings.deliverySchedule || DEFAULT_SCHEDULE) && (
+                        <WeeklyScheduleEditor
+                            schedule={settings.deliverySchedule || DEFAULT_SCHEDULE}
+                            onToggleDay={toggleDeliveryDayOpen}
+                            onTimeChange={handleDeliveryScheduleChange}
+                            labels={{ active: 'Lieferung', inactive: 'Keine Lieferung' }}
+                            colors={{ checkbox: 'bg-blue-500', border: 'border-blue-500' }}
+                        />
+                    )}
                 </SettingsSection>
 
             </main>
@@ -786,7 +783,7 @@ const AdminSettingsPage: React.FC = () => {
                 <Notification
                     message={notification.message}
                     type={notification.type}
-                    onClose={() => setNotification(null)}
+                    onClose={clearNotification}
                 />
             )}
 

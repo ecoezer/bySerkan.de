@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, LogIn } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { signIn } from '../services/authService';
+import { IS_DEV, isAdminEmail } from '../lib/config';
 import { useAuth } from '../hooks/useAuth';
 
 const AdminLogin: React.FC = () => {
@@ -13,11 +14,8 @@ const AdminLogin: React.FC = () => {
   const { currentUser } = useAuth();
 
   useEffect(() => {
-    if (currentUser && currentUser.email) {
-      const adminEmails = (import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((e: string) => e.trim());
-      if (adminEmails.includes(currentUser.email)) {
-        navigate('/admin/dashboard');
-      }
+    if (currentUser && isAdminEmail(currentUser.email)) {
+      navigate('/admin/dashboard');
     }
   }, [currentUser, navigate]);
 
@@ -27,17 +25,10 @@ const AdminLogin: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const result = await signIn(email, password);
 
-      if (error) {
-        if (error.status === 400) {
-          setError('Anmeldung fehlgeschlagen. Bitte überprüfen Sie Email und Passwort.');
-        } else {
-          setError(error.message);
-        }
+      if (!result.success) {
+        setError(result.errorMessage || 'Anmeldung fehlgeschlagen.');
         return;
       }
 
@@ -131,7 +122,7 @@ const AdminLogin: React.FC = () => {
               </button>
             </div>
 
-            {import.meta.env.DEV && (
+            {IS_DEV && (
               <div className="pt-4 border-t border-gray-100 mt-4">
                 <p className="text-xs text-gray-400">
                   🚀 Bitte erstellen Sie Admin-Benutzer direkt im Supabase Dashboard unter Authentication.

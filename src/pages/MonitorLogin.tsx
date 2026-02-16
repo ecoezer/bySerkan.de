@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { signIn } from '../services/authService';
+import { MONITOR_EMAIL } from '../lib/config';
 import { Lock, LogIn } from 'lucide-react';
 
 export default function MonitorLogin() {
@@ -14,20 +15,11 @@ export default function MonitorLogin() {
     setError('');
     setIsLoading(true);
 
-    const MONITOR_EMAIL = 'monitor@byserkan.de';
-
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: MONITOR_EMAIL,
-        password,
-      });
+      const result = await signIn(MONITOR_EMAIL, password);
 
-      if (error) {
-        if (error.status === 400) {
-          setError('Ungültiges Passwort.');
-        } else {
-          setError(error.message);
-        }
+      if (!result.success) {
+        setError(result.errorMessage || 'Ungültiges Passwort.');
         return;
       }
 

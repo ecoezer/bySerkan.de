@@ -1,89 +1,218 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, Trash2, Copy, GripVertical } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Notification } from '../components/Notification';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { useNotification } from '../hooks/useNotification';
+import { getErrorMessage } from '../lib/errors';
+import {
+    fetchCategories as fetchCategoriesFromService,
+    fetchMenuItems as fetchMenuItemsFromService,
+    saveCategory as saveCategoryToService,
+    saveMenuItem as saveMenuItemToService,
+    deleteCategory as deleteCategoryFromService,
+    deleteMenuItem as deleteMenuItemFromService,
+    duplicateMenuItem as duplicateMenuItemInService,
+    reorderCategories,
+    reorderMenuItems,
+    type AdminCategory,
+    type AdminMenuItem,
+} from '../services/adminMenuService';
 
-interface Category {
-    id: string;
-    title: string;
-    description: string;
-    order: number;
-    slug: string;
-}
+// Local Modal Components
+const MenuItemModal = ({
+    isOpen,
+    onClose,
+    onSave,
+    editingItem,
+    setEditingItem,
+    categories
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (e: React.FormEvent) => void;
+    editingItem: Partial<AdminMenuItem> | null;
+    setEditingItem: React.Dispatch<React.SetStateAction<Partial<AdminMenuItem> | null>>;
+    categories: AdminCategory[];
+}) => {
+    if (!isOpen) return null;
 
-interface MenuItem {
-    id: string;
-    category_id: string;
-    name: string;
-    description: string;
-    price: number;
-    number: number;
-    allergens?: string;
-    order?: number;
-    category_slug?: string;
-}
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-md p-6">
+                <h3 className="text-xl font-bold mb-4">{editingItem?.id ? 'Artikel bearbeiten' : 'Neuer Artikel'}</h3>
+                <form onSubmit={onSave} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Kategorie</label>
+                        <select
+                            required
+                            className="w-full rounded-lg border p-2"
+                            value={editingItem?.category_id || ''}
+                            onChange={e => setEditingItem(prev => ({ ...prev!, category_id: e.target.value }))}
+                        >
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>
+                                    {cat.title}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Nummer</label>
+                        <input
+                            type="number"
+                            required
+                            className="w-full rounded-lg border p-2"
+                            value={editingItem?.number || ''}
+                            onChange={e => setEditingItem(prev => ({ ...prev!, number: Number(e.target.value) }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Name</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full rounded-lg border p-2"
+                            value={editingItem?.name || ''}
+                            onChange={e => setEditingItem(prev => ({ ...prev!, name: e.target.value }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Beschreibung</label>
+                        <textarea
+                            className="w-full rounded-lg border p-2"
+                            value={editingItem?.description || ''}
+                            onChange={e => setEditingItem(prev => ({ ...prev!, description: e.target.value }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Preis (€)</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            required
+                            className="w-full rounded-lg border p-2"
+                            value={editingItem?.price || ''}
+                            onChange={e => setEditingItem(prev => ({ ...prev!, price: Number(e.target.value) }))}
+                        />
+                    </div>
+                    <div className="flex gap-3 mt-6">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 px-4 py-2 bg-gray-100 rounded-lg"
+                        >
+                            Abbrechen
+                        </button>
+                        <button
+                            type="submit"
+                            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg"
+                        >
+                            Speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const CategoryModal = ({
+    isOpen,
+    onClose,
+    onSave,
+    editingCategory,
+    setEditingCategory
+}: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (e: React.FormEvent) => void;
+    editingCategory: Partial<AdminCategory> | null;
+    setEditingCategory: React.Dispatch<React.SetStateAction<Partial<AdminCategory> | null>>;
+}) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-md p-6">
+                <h3 className="text-xl font-bold mb-4">{editingCategory?.id ? 'Kategorie bearbeiten' : 'Neue Kategorie'}</h3>
+                <form onSubmit={onSave} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Titel</label>
+                        <input
+                            type="text"
+                            required
+                            className="w-full rounded-lg border p-2"
+                            value={editingCategory?.title || ''}
+                            onChange={e => setEditingCategory(prev => ({ ...prev!, title: e.target.value }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Beschreibung</label>
+                        <textarea
+                            className="w-full rounded-lg border p-2"
+                            value={editingCategory?.description || ''}
+                            onChange={e => setEditingCategory(prev => ({ ...prev!, description: e.target.value }))}
+                        />
+                    </div>
+                    <div className="flex gap-3 mt-6">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 px-4 py-2 bg-gray-100 rounded-lg"
+                        >
+                            Abbrechen
+                        </button>
+                        <button
+                            type="submit"
+                            className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg"
+                        >
+                            Speichern
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
 
 const AdminMenuPage: React.FC = () => {
     const navigate = useNavigate();
-    const [categories, setCategories] = useState<Category[]>([]);
-    const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+    const [categories, setCategories] = useState<AdminCategory[]>([]);
+    const [menuItems, setMenuItems] = useState<AdminMenuItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     // Edit States
-    const [editingCategory, setEditingCategory] = useState<Partial<Category> | null>(null);
-    const [editingItem, setEditingItem] = useState<Partial<MenuItem> | null>(null);
+    const [editingCategory, setEditingCategory] = useState<Partial<AdminCategory> | null>(null);
+    const [editingItem, setEditingItem] = useState<Partial<AdminMenuItem> | null>(null);
     const [isAddingCategory, setIsAddingCategory] = useState(false);
     const [isAddingItem, setIsAddingItem] = useState(false);
     const [confirmAction, setConfirmAction] = useState<{
         type: 'delete-category' | 'delete-item' | 'duplicate-item';
         itemId?: string;
         categoryId?: string;
-        item?: MenuItem;
+        item?: AdminMenuItem;
         title: string;
         message: string;
     } | null>(null);
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-
-    const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
-        setNotification({ message, type });
-        setTimeout(() => setNotification(null), 3000);
-    }, []);
+    const { notification, showNotification, clearNotification } = useNotification();
 
     const fetchData = useCallback(async () => {
         try {
             setLoading(true);
-
-            // Fetch Categories
-            const { data: cats, error: catError } = await supabase
-                .from('categories')
-                .select('*')
-                .order('order');
-
-            if (catError) throw catError;
-            setCategories(cats || []);
-
-            if (cats && cats.length > 0 && !selectedCategory) {
+            const [cats, items] = await Promise.all([
+                fetchCategoriesFromService(),
+                fetchMenuItemsFromService(),
+            ]);
+            setCategories(cats);
+            if (cats.length > 0 && !selectedCategory) {
                 setSelectedCategory(cats[0].id);
             }
-
-            // Fetch Items
-            const { data: items, error: itemError } = await supabase
-                .from('menu_items')
-                .select('*')
-                .order('number');
-
-            if (itemError) throw itemError;
-
-            // Sort by order if available, else by number
-            const sortedItems = [...(items || [])].sort((a, b) => (a.order ?? a.number) - (b.order ?? b.number));
-            setMenuItems(sortedItems);
+            setMenuItems(items);
         } catch (error) {
-            console.error('Error fetching menu data:', error);
-            showNotification('Fehler beim Laden der Daten', 'error');
+            showNotification('Fehler beim Laden der Daten: ' + getErrorMessage(error), 'error');
         } finally {
             setLoading(false);
         }
@@ -107,46 +236,13 @@ const AdminMenuPage: React.FC = () => {
         }
 
         try {
-            // Custom UUID generator for non-secure contexts where crypto.randomUUID might be missing
-            const uuidv4 = () => {
-                if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-                    return crypto.randomUUID();
-                }
-                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                });
-            };
-
-            if (editingCategory.id) {
-                const { error } = await supabase
-                    .from('categories')
-                    .update({
-                        title: editingCategory.title,
-                        description: editingCategory.description,
-                        order: editingCategory.order
-                    })
-                    .eq('id', editingCategory.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('categories')
-                    .insert({
-                        id: uuidv4(),
-                        title: editingCategory.title,
-                        description: editingCategory.description,
-                        order: categories.length,
-                        slug: editingCategory.title?.toLowerCase().trim().replace(/\s+/g, '-')
-                    });
-                if (error) throw error;
-            }
+            await saveCategoryToService(editingCategory, categories.length);
             showNotification(editingCategory.id ? 'Kategorie aktualisiert' : 'Kategorie hinzugefügt');
             setEditingCategory(null);
             setIsAddingCategory(false);
             fetchData();
         } catch (error: unknown) {
-            console.error('Error saving category:', error);
-            showNotification('Fehler beim Speichern der Kategorie: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            showNotification(getErrorMessage(error), 'error');
         }
     };
 
@@ -163,35 +259,14 @@ const AdminMenuPage: React.FC = () => {
         }
 
         try {
-            const itemData = {
-                name: editingItem.name,
-                description: editingItem.description || '',
-                price: Number(editingItem.price),
-                number: Number(editingItem.number),
-                category_id: editingItem.category_id,
-                category_slug: categories.find(c => c.id === editingItem.category_id)?.slug,
-                allergens: editingItem.allergens || ''
-            };
-
-            if (editingItem.id) {
-                const { error } = await supabase
-                    .from('menu_items')
-                    .update(itemData)
-                    .eq('id', editingItem.id);
-                if (error) throw error;
-            } else {
-                const { error } = await supabase
-                    .from('menu_items')
-                    .insert(itemData);
-                if (error) throw error;
-            }
+            const categorySlug = categories.find(c => c.id === editingItem.category_id)?.slug;
+            await saveMenuItemToService(editingItem, categorySlug);
             showNotification(editingItem.id ? 'Artikel aktualisiert' : 'Artikel hinzugefügt');
             setEditingItem(null);
             setIsAddingItem(false);
             fetchData();
         } catch (error: unknown) {
-            console.error('Error saving item:', error);
-            showNotification('Fehler beim Speichern des Artikels: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            showNotification(getErrorMessage(error), 'error');
         }
     };
 
@@ -213,7 +288,7 @@ const AdminMenuPage: React.FC = () => {
         });
     };
 
-    const handleDuplicateItem = (item: MenuItem) => {
+    const handleDuplicateItem = (item: AdminMenuItem) => {
         setConfirmAction({
             type: 'duplicate-item',
             item: item,
@@ -227,26 +302,18 @@ const AdminMenuPage: React.FC = () => {
 
         try {
             if (confirmAction.type === 'delete-category' && confirmAction.categoryId) {
-                // Delete items first (or count on CASCADE if set up, but let's be explicit if needed)
-                await supabase.from('menu_items').delete().eq('category_id', confirmAction.categoryId);
-                await supabase.from('categories').delete().eq('id', confirmAction.categoryId);
+                await deleteCategoryFromService(confirmAction.categoryId);
                 showNotification('Kategorie gelöscht');
             } else if (confirmAction.type === 'delete-item' && confirmAction.itemId) {
-                await supabase.from('menu_items').delete().eq('id', confirmAction.itemId);
+                await deleteMenuItemFromService(confirmAction.itemId);
                 showNotification('Artikel gelöscht');
             } else if (confirmAction.type === 'duplicate-item' && confirmAction.item) {
-                // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { id, ...itemData } = confirmAction.item;
-                await supabase.from('menu_items').insert({
-                    ...itemData,
-                    name: `${confirmAction.item.name} (Kopie)`
-                });
+                await duplicateMenuItemInService(confirmAction.item);
                 showNotification('Artikel dupliziert');
             }
             fetchData();
         } catch (error: unknown) {
-            console.error('Error executing action:', error);
-            showNotification('Fehler bei der Aktion: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
+            showNotification(getErrorMessage(error), 'error');
         } finally {
             setConfirmAction(null);
         }
@@ -269,15 +336,10 @@ const AdminMenuPage: React.FC = () => {
             setCategories(updatedCats);
 
             try {
-                // Bulk update orders in Supabase
-                const updates = updatedCats.map(cat =>
-                    supabase.from('categories').update({ order: cat.order }).eq('id', cat.id)
-                );
-                await Promise.all(updates);
+                await reorderCategories(updatedCats);
                 showNotification('Kategorien neu sortiert');
             } catch (error) {
-                console.error('Error reordering categories:', error);
-                showNotification('Fehler beim Sortieren', 'error');
+                showNotification(getErrorMessage(error), 'error');
                 fetchData();
             }
         } else if (result.type === 'menu-item' && selectedCategory) {
@@ -293,14 +355,10 @@ const AdminMenuPage: React.FC = () => {
             setMenuItems([...otherItems, ...updatedCurrentItems]);
 
             try {
-                const updates = updatedCurrentItems.map(item =>
-                    supabase.from('menu_items').update({ order: item.order }).eq('id', item.id)
-                );
-                await Promise.all(updates);
+                await reorderMenuItems(updatedCurrentItems);
                 showNotification('Artikel neu sortiert');
             } catch (error) {
-                console.error('Error reordering items:', error);
-                showNotification('Fehler beim Sortieren', 'error');
+                showNotification(getErrorMessage(error), 'error');
                 fetchData();
             }
         }
@@ -490,128 +548,23 @@ const AdminMenuPage: React.FC = () => {
             </div>
 
             {/* Item Edit Modal */}
-            {(isAddingItem || editingItem) && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl w-full max-w-md p-6">
-                        <h3 className="text-xl font-bold mb-4">{editingItem?.id ? 'Artikel bearbeiten' : 'Neuer Artikel'}</h3>
-                        <form onSubmit={handleSaveItem} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Kategorie</label>
-                                <select
-                                    required
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingItem?.category_id || ''}
-                                    onChange={e => setEditingItem(prev => ({ ...prev!, category_id: e.target.value }))}
-                                >
-                                    {categories.map(cat => (
-                                        <option key={cat.id} value={cat.id}>
-                                            {cat.title}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Nummer</label>
-                                <input
-                                    type="number"
-                                    required
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingItem?.number || ''}
-                                    onChange={e => setEditingItem(prev => ({ ...prev!, number: Number(e.target.value) }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingItem?.name || ''}
-                                    onChange={e => setEditingItem(prev => ({ ...prev!, name: e.target.value }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Beschreibung</label>
-                                <textarea
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingItem?.description || ''}
-                                    onChange={e => setEditingItem(prev => ({ ...prev!, description: e.target.value }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Preis (€)</label>
-                                <input
-                                    type="number"
-                                    step="0.01"
-                                    required
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingItem?.price || ''}
-                                    onChange={e => setEditingItem(prev => ({ ...prev!, price: Number(e.target.value) }))}
-                                />
-                            </div>
-                            <div className="flex gap-3 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsAddingItem(false); setEditingItem(null); }}
-                                    className="flex-1 px-4 py-2 bg-gray-100 rounded-lg"
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg"
-                                >
-                                    Speichern
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            <MenuItemModal
+                isOpen={isAddingItem || !!editingItem}
+                onClose={() => { setIsAddingItem(false); setEditingItem(null); }}
+                onSave={handleSaveItem}
+                editingItem={editingItem}
+                setEditingItem={setEditingItem}
+                categories={categories}
+            />
 
             {/* Category Edit Modal */}
-            {(isAddingCategory || (editingCategory && isAddingCategory)) && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl w-full max-w-md p-6">
-                        <h3 className="text-xl font-bold mb-4">{editingCategory?.id ? 'Kategorie bearbeiten' : 'Neue Kategorie'}</h3>
-                        <form onSubmit={handleSaveCategory} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Titel</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingCategory?.title || ''}
-                                    onChange={e => setEditingCategory(prev => ({ ...prev!, title: e.target.value }))}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Beschreibung</label>
-                                <textarea
-                                    className="w-full rounded-lg border p-2"
-                                    value={editingCategory?.description || ''}
-                                    onChange={e => setEditingCategory(prev => ({ ...prev!, description: e.target.value }))}
-                                />
-                            </div>
-                            <div className="flex gap-3 mt-6">
-                                <button
-                                    type="button"
-                                    onClick={() => { setIsAddingCategory(false); setEditingCategory(null); }}
-                                    className="flex-1 px-4 py-2 bg-gray-100 rounded-lg"
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg"
-                                >
-                                    Speichern
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+            <CategoryModal
+                isOpen={isAddingCategory || (!!editingCategory && isAddingCategory)}
+                onClose={() => { setIsAddingCategory(false); setEditingCategory(null); }}
+                onSave={handleSaveCategory}
+                editingCategory={editingCategory}
+                setEditingCategory={setEditingCategory}
+            />
 
             <ConfirmationModal
                 isOpen={!!confirmAction}
@@ -626,7 +579,7 @@ const AdminMenuPage: React.FC = () => {
                 <Notification
                     message={notification.message}
                     type={notification.type}
-                    onClose={() => setNotification(null)}
+                    onClose={clearNotification}
                 />
             )}
         </div>

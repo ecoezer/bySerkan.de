@@ -1,9 +1,11 @@
 import { supabase } from '../lib/supabase';
+import { TABLE } from '../lib/config';
+import { logServiceError } from '../lib/errors';
 
 export async function cleanupDuplicateCategories(): Promise<{ success: boolean; message: string; deletedCount: number }> {
     try {
         const { data: categories, error } = await supabase
-            .from('categories')
+            .from(TABLE.CATEGORIES)
             .select('id, slug, title');
 
         if (error) throw error;
@@ -39,7 +41,7 @@ export async function cleanupDuplicateCategories(): Promise<{ success: boolean; 
 
                 for (const cat of toDelete) {
                     const { error: deleteError } = await supabase
-                        .from('categories')
+                        .from(TABLE.CATEGORIES)
                         .delete()
                         .eq('id', cat.id);
 
@@ -57,7 +59,7 @@ export async function cleanupDuplicateCategories(): Promise<{ success: boolean; 
         };
 
     } catch (error: unknown) {
-        console.error('Cleanup failed:', error);
+        logServiceError('cleanupService.cleanupDuplicateCategories', error);
         const message = error instanceof Error ? error.message : String(error);
         return {
             success: false,

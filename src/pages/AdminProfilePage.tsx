@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { updatePassword } from '../services/authService';
 import { Notification } from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 
 const AdminProfilePage: React.FC = () => {
     const navigate = useNavigate();
@@ -10,35 +11,36 @@ const AdminProfilePage: React.FC = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const { notification, showSuccess, showError, clearNotification } = useNotification();
 
     const handlePasswordChange = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (newPassword !== confirmPassword) {
-            setNotification({ message: 'Die neuen Passwörter stimmen nicht überein', type: 'error' });
+            showError('Die neuen Passwörter stimmen nicht überein');
             return;
         }
 
         if (newPassword.length < 6) {
-            setNotification({ message: 'Das neue Passwort muss mindestens 6 Zeichen lang sein', type: 'error' });
+            showError('Das neue Passwort muss mindestens 6 Zeichen lang sein');
             return;
         }
 
         setLoading(true);
         try {
-            const { error } = await supabase.auth.updateUser({
-                password: newPassword
-            });
+            const result = await updatePassword(newPassword);
 
-            if (error) throw error;
+            if (!result.success) {
+                showError(result.errorMessage || 'Fehler beim Ändern des Passworts');
+                return;
+            }
 
-            setNotification({ message: 'Passwort erfolgreich geändert!', type: 'success' });
+            showSuccess('Passwort erfolgreich geändert!');
             setNewPassword('');
             setConfirmPassword('');
         } catch (error: unknown) {
             console.error('Password change error:', error);
-            setNotification({ message: 'Fehler beim Ändern des Passworts: ' + (error instanceof Error ? error.message : 'Unknown error'), type: 'error' });
+            showError('Ein unbekannter Fehler ist aufgetreten.');
         } finally {
             setLoading(false);
         }
@@ -145,7 +147,7 @@ const AdminProfilePage: React.FC = () => {
                 <Notification
                     message={notification.message}
                     type={notification.type}
-                    onClose={() => setNotification(null)}
+                    onClose={clearNotification}
                 />
             )}
         </div>

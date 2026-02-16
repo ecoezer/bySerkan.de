@@ -1,47 +1,9 @@
 import { supabase } from '../lib/supabase';
+import { TABLE } from '../lib/config';
+import { logServiceError } from '../lib/errors';
 
-export interface DaySchedule {
-    isOpen: boolean;
-    open: string;
-    close: string;
-}
 
-export interface WeekSchedule {
-    monday: DaySchedule;
-    tuesday: DaySchedule;
-    wednesday: DaySchedule;
-    thursday: DaySchedule;
-    friday: DaySchedule;
-    saturday: DaySchedule;
-    sunday: DaySchedule;
-}
-
-export interface AddressSettings {
-    street: string;
-    city: string;
-    zip: string;
-    phone: string;
-}
-
-export interface DeliveryZone {
-    id: string;
-    name: string;
-    zipCode: string;
-    minOrder: number;
-    deliveryFee: number;
-}
-
-export interface StoreSettings {
-    isOpen: boolean;
-    isDeliveryAvailable: boolean;
-    isPickupAvailable: boolean;
-    pausedDateDelivery?: string | null;
-    pausedDatePickup?: string | null;
-    schedule: WeekSchedule;
-    deliverySchedule: WeekSchedule;
-    address: AddressSettings;
-    deliveryZones: DeliveryZone[];
-}
+import type { WeekSchedule, DeliveryZone, StoreSettings } from '../types';
 
 const STORE_ID = 'store';
 
@@ -98,14 +60,14 @@ export const DEFAULT_SETTINGS: StoreSettings = {
 export async function getStoreSettings(): Promise<StoreSettings> {
     try {
         const { data, error } = await supabase
-            .from('settings')
+            .from(TABLE.SETTINGS)
             .select('*')
             .eq('id', STORE_ID)
             .single();
 
         if (error) {
             if (error.code === 'PGRST116') { // Not found
-                await supabase.from('settings').upsert({
+                await supabase.from(TABLE.SETTINGS).upsert({
                     id: STORE_ID,
                     is_open: DEFAULT_SETTINGS.isOpen,
                     is_delivery_available: DEFAULT_SETTINGS.isDeliveryAvailable,
@@ -132,14 +94,14 @@ export async function getStoreSettings(): Promise<StoreSettings> {
             deliveryZones: data.delivery_zones || DEFAULT_ZONES
         };
     } catch (error) {
-        console.error('Error fetching store settings:', error);
+        logServiceError('settingsService.getStoreSettings', error);
         return DEFAULT_SETTINGS;
     }
 }
 
 export async function updateStoreSettings(settings: StoreSettings): Promise<void> {
     const { error } = await supabase
-        .from('settings')
+        .from(TABLE.SETTINGS)
         .upsert({
             id: STORE_ID,
             is_open: settings.isOpen,

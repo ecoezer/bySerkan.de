@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   LogOut,
   User,
   Clock,
@@ -12,25 +13,20 @@ import {
   Menu as MenuIcon,
   Settings
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { signOut } from '../services/authService';
 import { getAllOrders, deleteOrder } from '../services/orderService';
 import { Notification } from '../components/Notification';
+import { useNotification } from '../hooks/useNotification';
 import type { Order } from '../types';
-
-import { ArrowLeft } from 'lucide-react';
 
 const AdminOrdersPage: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { notification, showError, clearNotification } = useNotification();
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     try {
       setLoading(true);
       const fetchedOrders = await getAllOrders();
@@ -38,14 +34,18 @@ const AdminOrdersPage: React.FC = () => {
     } catch (error: unknown) {
       console.error('Error loading orders:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
-      setNotification({ message: `Fehler beim Laden der Bestellungen: ${message}`, type: 'error' });
+      showError(`Fehler beim Laden der Bestellungen: ${message}`);
     } finally {
       setLoading(false);
     }
-  };
+  }, [showError]);
+
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate('/admin/login');
   };
 
@@ -323,7 +323,7 @@ const AdminOrdersPage: React.FC = () => {
         <Notification
           message={notification.message}
           type={notification.type}
-          onClose={() => setNotification(null)}
+          onClose={clearNotification}
         />
       )}
     </div>

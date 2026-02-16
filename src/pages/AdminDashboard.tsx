@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut,
@@ -8,15 +8,13 @@ import {
   Settings,
   UserCog
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Notification } from '../components/Notification';
+import { signOut } from '../services/authService';
 
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     navigate('/admin/login');
   };
 
@@ -107,15 +105,6 @@ const AdminDashboard: React.FC = () => {
           ))}
         </div>
       </main>
-
-
-      {notification && (
-        <Notification
-          message={notification.message}
-          type={notification.type}
-          onClose={() => setNotification(null)}
-        />
-      )}
     </div>
   );
 };

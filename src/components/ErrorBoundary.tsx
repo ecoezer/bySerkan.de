@@ -4,6 +4,8 @@ import { AlertTriangle } from 'lucide-react';
 interface Props {
   children: ReactNode;
   fallbackMessage?: string;
+  /** Optional repair handler. When provided, renders a repair button in the error UI. */
+  onRepair?: () => Promise<{ message: string }>;
 }
 
 interface State {
@@ -31,15 +33,32 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error boundary caught error:', error, errorInfo);
   }
 
+  handleRepair = async () => {
+    if (!this.props.onRepair) return;
+    try {
+      if (!confirm('Reparatur starten?')) return;
+      const result = await this.props.onRepair();
+      alert(result.message);
+      window.location.reload();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      alert('Fehler: ' + message);
+    }
+  };
+
   render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
           <div className="max-w-md w-full bg-red-500/10 border border-red-500 rounded-lg p-8 text-center">
             <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-white mb-2">Something went wrong</h1>
+            <h1 className="text-2xl font-bold text-white mb-2">
+              {this.props.onRepair ? 'Ein Fehler ist aufgetreten 😕' : 'Something went wrong'}
+            </h1>
             <p className="text-red-300 mb-4">
-              {this.props.fallbackMessage || 'An error occurred while loading this page.'}
+              {this.props.fallbackMessage || (this.props.onRepair
+                ? 'Die Anwendung konnte nicht geladen werden. Dies liegt oft an doppelten Datenbank-Einträgen.'
+                : 'An error occurred while loading this page.')}
             </p>
             {this.state.error && (
               <div className="bg-slate-800 rounded p-4 mb-4">
@@ -48,18 +67,28 @@ export class ErrorBoundary extends Component<Props, State> {
                 </p>
               </div>
             )}
-            <div className="space-y-2 text-sm text-slate-400">
-              <p>Possible solutions:</p>
-              <ul className="list-disc list-inside text-left">
-                <li>Check your Supabase environment variables</li>
-                <li>Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set</li>
-                <li>Try refreshing the page</li>
-                <li>Check the browser console for more details</li>
-              </ul>
-            </div>
+            {!this.props.onRepair && (
+              <div className="space-y-2 text-sm text-slate-400">
+                <p>Possible solutions:</p>
+                <ul className="list-disc list-inside text-left">
+                  <li>Check your Supabase environment variables</li>
+                  <li>Ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set</li>
+                  <li>Try refreshing the page</li>
+                  <li>Check the browser console for more details</li>
+                </ul>
+              </div>
+            )}
+            {this.props.onRepair && (
+              <button
+                onClick={this.handleRepair}
+                className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                🔧 Datenbank Reparieren & Neustarten
+              </button>
+            )}
             <button
               onClick={() => window.location.reload()}
-              className="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
             >
               Reload Page
             </button>

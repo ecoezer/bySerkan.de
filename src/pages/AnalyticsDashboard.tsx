@@ -11,28 +11,10 @@ import {
   Clock,
   MapPin
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import type { Order } from '../types';
+import { fetchAllOrdersForAnalytics } from '../services/analyticsService';
+import type { Order, Analytics, TimePeriod } from '../types';
 
-type TimePeriod = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'all';
 
-interface Analytics {
-  totalRevenue: number;
-  totalOrders: number;
-  averageOrder: number;
-  pickupVsDelivery: { pickup: number; delivery: number };
-  topProducts: Array<{ name: string; quantity: number; revenue: number; percentage: number }>;
-  deviceStats: {
-    mobile: number;
-    desktop: number;
-    ios: number;
-    android: number;
-  };
-  browsers: Array<{ name: string; count: number }>;
-  peakHours: Array<{ hour: string; orders: number; revenue: number }>;
-  deliveryZones: Array<{ zone: string; orders: number; revenue: number; avgOrder: number }>;
-  dailyTrend: Array<{ date: string; orders: number; revenue: number }>;
-}
 
 const AnalyticsDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -165,7 +147,7 @@ const AnalyticsDashboard: React.FC = () => {
   const filterOrdersByPeriod = useCallback(() => {
     if (!orders.length) return;
 
-    let filtered = [];
+    let filtered: Order[] = [];
     let start: Date | null = null;
     let end: Date | null = null;
     const now = new Date();
@@ -218,31 +200,7 @@ const AnalyticsDashboard: React.FC = () => {
     const loadOrders = async () => {
       try {
         setLoading(true);
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        // Map Supabase data to Order interface
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mappedOrders: Order[] = (data || []).map((row: any) => ({
-          id: row.id,
-          items: row.items,
-          totalAmount: parseFloat(row.total_amount),
-          status: row.status,
-          deliveryType: row.delivery_type || 'delivery',
-          deliveryZone: row.delivery_zone,
-          createdAt: new Date(row.created_at),
-          customerName: row.customer_name,
-          customerAddress: row.customer_address,
-          customerPhone: row.customer_phone,
-          note: row.note,
-          deviceInfo: row.device_info || {},
-          ipAddress: row.ip_address
-        }));
-
+        const mappedOrders = await fetchAllOrdersForAnalytics();
         setOrders(mappedOrders);
       } catch (error) {
         console.error('Error loading analytics:', error);

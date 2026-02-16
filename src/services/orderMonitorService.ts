@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
-import { Order } from '../types';
+import { TABLE } from '../lib/config';
+import type { Order, SupabaseOrderRow } from '../types';
+import { mapSupabaseRowToOrder } from './orderMapper';
+import { logServiceError } from '../lib/errors';
 
 export type OrderStatus = 'new' | 'accepted' | 'closed';
 
@@ -21,17 +24,16 @@ class OrderMonitorService {
   ): void {
     const fetchOrders = async () => {
       const { data, error } = await supabase
-        .from('orders')
+        .from(TABLE.ORDERS)
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching orders:', error);
+        logServiceError('orderMonitorService.fetchOrders', error);
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const orders = (data as any[]).map(this.mapRowToOrder);
+      const orders = (data as SupabaseOrderRow[]).map(row => this.mapRowToMonitorOrder(row));
 
       if (this.isFirstLoad) {
         orders.forEach(o => this.seenOrderIds.add(o.id));
@@ -51,8 +53,7 @@ class OrderMonitorService {
         { event: '*', table: 'orders', schema: 'public' },
         async (payload) => {
           if (payload.eventType === 'INSERT') {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const newOrder = this.mapRowToOrder(payload.new as any);
+            const newOrder = this.mapRowToMonitorOrder(payload.new as SupabaseOrderRow);
             if (!this.seenOrderIds.has(newOrder.id)) {
               this.seenOrderIds.add(newOrder.id);
               if (newOrder.monitorStatus === 'new') {
@@ -60,50 +61,17 @@ class OrderMonitorService {
               }
             }
           }
-          // Refresh list on any change
           fetchOrders();
         }
       )
       .subscribe();
   }
 
-  // Use explicit type for row, but we need to cast input from Supabase which is generic
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private mapRowToOrder(row: any): MonitorOrder {
+  /** Extends the shared mapper with monitor-specific fields */
+  private mapRowToMonitorOrder(row: SupabaseOrderRow): MonitorOrder {
     return {
-      id: row.id,
-      customerName: row.customer_name,
-      customerAddress: row.customer_address,
-      customerPhone: row.customer_phone,
-      note: row.note,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: (row.items || []).map((item: any) => ({
-        menuItem: {
-          id: item.menuItemId,
-          number: item.menuItemNumber,
-          name: item.menuItemName,
-          price: item.menuItemPrice,
-          isMeatSelection: item.menuItemIsMeatSelection || false,
-          isPizza: item.menuItemIsPizza || false,
-          isPasta: item.menuItemIsPasta || false,
-        },
-        quantity: item.quantity,
-        selectedSize: item.selectedSize || undefined,
-        selectedIngredients: item.selectedIngredients || undefined,
-        selectedExtras: item.selectedExtras || undefined,
-        selectedPastaType: item.selectedPastaType || undefined,
-        selectedSauce: item.selectedSauce || undefined,
-        selectedSideDish: item.selectedSideDish || undefined,
-        selectedExclusions: item.selectedExclusions || undefined,
-      })),
-      totalAmount: parseFloat(row.total_amount),
-      createdAt: new Date(row.created_at),
-      deviceInfo: row.device_info,
-      ipAddress: row.ip_address,
-      status: row.status,
-      deliveryType: row.delivery_type,
-      deliveryZone: row.delivery_zone,
-      monitorStatus: row.monitor_status || 'new'
+      ...mapSupabaseRowToOrder(row),
+      monitorStatus: row.monitor_status || 'new',
     };
   }
 
@@ -129,7 +97,7 @@ class OrderMonitorService {
   async updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
     try {
       const { error } = await supabase
-        .from('orders')
+        .from(TABLE.ORDERS)
         .update({
           monitor_status: status,
           updated_at: new Date().toISOString()
@@ -138,7 +106,7 @@ class OrderMonitorService {
 
       if (error) throw error;
     } catch (error) {
-      console.error('Error updating order status:', error);
+      logServiceError('orderMonitorService.updateOrderStatus', error);
       throw error;
     }
   }

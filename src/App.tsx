@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import AdminLogin from './pages/AdminLogin';
@@ -13,21 +12,9 @@ import OrderMonitor from './pages/OrderMonitor';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 import { AuthProvider } from './context/AuthContext';
-import { useAuth } from './hooks/useAuth';
 import { AudioProvider } from './context/AudioContext';
 import { ProtectedAdminRoute } from './components/ProtectedAdminRoute';
-
-const MonitorProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, loading } = useAuth();
-
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">Loading...</div>;
-  }
-
-  // Allow any authenticated user to see the monitor (Admin or Monitor)
-  // We could strictly check email, but for now just auth is sufficient as the route is protected
-  return currentUser ? <>{children}</> : <Navigate to="/monitor-login" replace />;
-};
+import { MonitorProtectedRoute } from './components/MonitorProtectedRoute';
 
 function App() {
   return (

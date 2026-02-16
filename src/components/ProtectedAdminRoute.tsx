@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { isAdminEmail } from '../lib/config';
 
 export const ProtectedAdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { currentUser, loading } = useAuth();
@@ -11,8 +12,7 @@ export const ProtectedAdminRoute: React.FC<{ children: React.ReactNode }> = ({ c
         </div>;
     }
 
-    const adminEmails = (import.meta.env.VITE_ADMIN_EMAILS || '').split(',').map((e: string) => e.trim());
-    const isAuthorized = currentUser && currentUser.email && adminEmails.includes(currentUser.email);
+    const isAuthorized = currentUser && isAdminEmail(currentUser.email);
 
     if (!currentUser || !isAuthorized) {
         // Optionally sign out unauthorized user to clear state

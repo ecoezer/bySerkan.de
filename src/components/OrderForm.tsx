@@ -4,28 +4,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Trash2, Plus, Minus, ShoppingCart, Clock, Send } from 'lucide-react';
 import { createOrder } from '../services/orderService';
-import { getStoreSettings, isStoreOpen, getNextAvailableSchedule, type DeliveryZone, type StoreSettings } from '../services/settingsService';
-import type { OrderItem as OrderItemType, CustomerInfo, SelectedSize } from '../types';
+
+import type { OrderItem, CustomerInfo } from '../types';
 
 import { useCartStore } from '../store/cart.store';
-
-interface OrderItem {
-  menuItem: {
-    id: number;
-    name: string;
-    price: number;
-    number: string | number;
-  };
-  quantity: number;
-  selectedSize?: SelectedSize;
-  selectedIngredients?: string[];
-  selectedExtras?: string[];
-  selectedPastaType?: string;
-  selectedSauce?: string;
-  selectedExclusions?: string[];
-  selectedSideDish?: string;
-  selectedDrink?: string;
-}
+import { useStoreStatus } from '../hooks/useStoreStatus';
 
 interface OrderFormProps {
   onCloseMobileCart?: () => void;
@@ -77,19 +60,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showAllItems, setShowAllItems] = useState(false);
-  const [deliveryZones, setDeliveryZones] = useState<DeliveryZone[]>([]);
-  const [settings, setSettings] = useState<StoreSettings | null>(null);
-  const [storeStatus, setStoreStatus] = useState<{
-    isOpen: boolean;
-    isDeliveryOpen: boolean;
-    isPickupOpen: boolean;
-    message?: string;
-    deliveryMessage?: string;
-  }>({
-    isOpen: true,
-    isDeliveryOpen: true,
-    isPickupOpen: true
-  });
+
 
   const {
     register,
@@ -110,59 +81,44 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const watchDeliveryZone = watch('deliveryZone');
   const watchDeliveryTime = watch('deliveryTime');
 
-  const [nextSchedule, setNextSchedule] = useState<{ dayName: string; open: string; close: string; isToday: boolean } | null>(null);
+  const { settings, storeStatus, nextSchedule } = useStoreStatus(watchOrderType);
 
+  // Local state for delivery zones (derived from settings)
+  const deliveryZones = useMemo(() => settings?.deliveryZones || [], [settings]);
+
+  // Handle auto-switching logic when status changes
   React.useEffect(() => {
-    const checkStoreStatus = async () => {
-      const settings = await getStoreSettings();
-      const status = isStoreOpen(settings);
-
-      const currentType = watch('orderType');
-      const nextSched = getNextAvailableSchedule(settings, currentType);
-
-      setStoreStatus(status);
-      setSettings(settings);
-      setNextSchedule(nextSched);
-      setDeliveryZones(settings.deliveryZones || []);
-
-      // Auto-switch if selected type is disabled
-      if (status.isOpen) {
-        if (currentType === 'delivery' && !status.isDeliveryOpen && status.isPickupOpen) {
-          setValue('orderType', 'pickup');
-        } else if (currentType === 'pickup' && !status.isPickupOpen && status.isDeliveryOpen) {
-          setValue('orderType', 'delivery');
-        }
-      } else {
-        // If closed, force specific time for pre-order
-        setValue('deliveryTime', 'specific');
-        if (nextSched && !watch('specificTime')) {
-          setValue('specificTime', nextSched.open);
-        }
+    if (storeStatus.isOpen) {
+      if (watchOrderType === 'delivery' && !storeStatus.isDeliveryOpen && storeStatus.isPickupOpen) {
+        setValue('orderType', 'pickup');
+      } else if (watchOrderType === 'pickup' && !storeStatus.isPickupOpen && storeStatus.isDeliveryOpen) {
+        setValue('orderType', 'delivery');
       }
-    };
-    checkStoreStatus();
-    // Re-check every minute
-    const interval = setInterval(checkStoreStatus, 60000);
-    return () => clearInterval(interval);
-  }, [watch, setValue]);
+    } else {
+      // If closed, force specific time for pre-order
+      setValue('deliveryTime', 'specific');
+      if (nextSchedule && !watch('specificTime')) {
+        setValue('specificTime', nextSchedule.open);
+      }
+    }
+  }, [storeStatus, watchOrderType, setValue, nextSchedule, watch]);
 
   // Update next schedule when order type changes or settings load
+  // Pre-select specific time if validated next schedule is available
   React.useEffect(() => {
-    if (settings) {
-      const nextSched = getNextAvailableSchedule(settings, watchOrderType);
-      setNextSchedule(nextSched);
+    if (settings && nextSchedule) {
 
       const currentSpecificTime = watch('specificTime');
 
       // If specific time is selected or forced, validate it/update it
-      if (nextSched && (!storeStatus.isOpen || watchDeliveryTime === 'specific')) {
+      if (nextSchedule && (!storeStatus.isOpen || watchDeliveryTime === 'specific')) {
         // If empty, OR if current time is before the new open time (e.g. switching Pickup 11:00 -> Delivery 12:00)
-        if (!currentSpecificTime || (currentSpecificTime < nextSched.open)) {
-          setValue('specificTime', nextSched.open);
+        if (!currentSpecificTime || (currentSpecificTime < nextSchedule.open)) {
+          setValue('specificTime', nextSchedule.open);
         }
       }
     }
-  }, [watchOrderType, settings, storeStatus.isOpen, watchDeliveryTime, setValue, watch]);
+  }, [watchOrderType, settings, storeStatus.isOpen, watchDeliveryTime, setValue, watch, nextSchedule]);
 
 
 
@@ -293,7 +249,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
         note: data.note,
       };
 
-      await createOrder(orderItems as OrderItemType[], customerInfo, total);
+      await createOrder(orderItems as OrderItem[], customerInfo, total);
 
       const whatsappMessage = generateWhatsAppMessage(data);
       const whatsappUrl = `https://wa.me/+4915771459166?text=${whatsappMessage}`;
@@ -333,27 +289,31 @@ const OrderForm: React.FC<OrderFormProps> = ({
     if (newQuantity <= 0) {
       onRemoveItem(
         item.menuItem.id,
-        item.selectedSize,
-        item.selectedIngredients,
-        item.selectedExtras,
-        item.selectedPastaType,
-        item.selectedSauce,
-        item.selectedExclusions,
-        item.selectedSideDish,
-        item.selectedDrink
+        {
+          selectedSize: item.selectedSize,
+          selectedIngredients: item.selectedIngredients,
+          selectedExtras: item.selectedExtras,
+          selectedPastaType: item.selectedPastaType,
+          selectedSauce: item.selectedSauce,
+          selectedExclusions: item.selectedExclusions,
+          selectedSideDish: item.selectedSideDish,
+          selectedDrink: item.selectedDrink,
+        }
       );
     } else {
       onUpdateQuantity(
         item.menuItem.id,
         newQuantity,
-        item.selectedSize,
-        item.selectedIngredients,
-        item.selectedExtras,
-        item.selectedPastaType,
-        item.selectedSauce,
-        item.selectedExclusions,
-        item.selectedSideDish,
-        item.selectedDrink
+        {
+          selectedSize: item.selectedSize,
+          selectedIngredients: item.selectedIngredients,
+          selectedExtras: item.selectedExtras,
+          selectedPastaType: item.selectedPastaType,
+          selectedSauce: item.selectedSauce,
+          selectedExclusions: item.selectedExclusions,
+          selectedSideDish: item.selectedSideDish,
+          selectedDrink: item.selectedDrink,
+        }
       );
     }
   }, [onRemoveItem, onUpdateQuantity]);
@@ -361,14 +321,16 @@ const OrderForm: React.FC<OrderFormProps> = ({
   const handleRemoveItem = useCallback((item: OrderItem) => {
     onRemoveItem(
       item.menuItem.id,
-      item.selectedSize,
-      item.selectedIngredients,
-      item.selectedExtras,
-      item.selectedPastaType,
-      item.selectedSauce,
-      item.selectedExclusions,
-      item.selectedSideDish,
-      item.selectedDrink
+      {
+        selectedSize: item.selectedSize,
+        selectedIngredients: item.selectedIngredients,
+        selectedExtras: item.selectedExtras,
+        selectedPastaType: item.selectedPastaType,
+        selectedSauce: item.selectedSauce,
+        selectedExclusions: item.selectedExclusions,
+        selectedSideDish: item.selectedSideDish,
+        selectedDrink: item.selectedDrink,
+      }
     );
   }, [onRemoveItem]);
 
@@ -416,12 +378,14 @@ const OrderForm: React.FC<OrderFormProps> = ({
 
   if (orderItems.length === 0) {
     return (
-      <div className="p-6 text-center">
-        <div className="mb-4">
-          <ShoppingCart className="w-16 h-16 mx-auto text-gray-300" />
+      <div className="flex items-center justify-center min-h-[60vh] px-8">
+        <div className="text-center">
+          <div className="mb-6">
+            <ShoppingCart className="w-10 h-10 mx-auto text-gray-500 stroke-[2.5]" />
+          </div>
+          <h3 className="text-[1.7rem] font-extrabold text-gray-700 mb-3 leading-tight">Fülle deinen Warenkorb</h3>
+          <p className="text-gray-400 text-[1.05rem] leading-relaxed max-w-[280px] mx-auto">Füge einige leckere Gerichte aus der Speisekarte hinzu und bestelle dein Essen.</p>
         </div>
-        <h3 className="text-xl font-bold text-gray-900 mb-2">Ihr Warenkorb ist leer</h3>
-        <p className="text-gray-600">Fügen Sie Artikel aus dem Menü hinzu, um eine Bestellung aufzugeben.</p>
       </div>
     );
   }
