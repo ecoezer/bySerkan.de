@@ -31,6 +31,7 @@ const detectOS = (): string => {
   return 'Unknown';
 };
 
+/*
 const extractDeliveryZone = (address: string): string => {
   const match = address.match(/\d{5}/);
   if (match) {
@@ -39,6 +40,7 @@ const extractDeliveryZone = (address: string): string => {
   const parts = address.split(',');
   return parts[parts.length - 1]?.trim() || 'Unknown';
 };
+*/
 
 export async function createOrder(
   items: OrderItem[],
@@ -68,7 +70,8 @@ export async function createOrder(
     customer_name: customerInfo.name,
     customer_address: customerInfo.address,
     customer_phone: customerInfo.phone,
-    note: customerInfo.note || '',
+    // note column missing in DB
+    // note: customerInfo.note || '', 
     items: items.map(item => ({
       menuItemId: item.menuItem.id,
       menuItemName: item.menuItem.name,
@@ -87,11 +90,11 @@ export async function createOrder(
       selectedExclusions: item.selectedExclusions || [],
     })),
     total_amount: totalAmount,
-    device_info: deviceInfo,
-    ip_address: ipAddress || 'unknown',
+    // device_info: deviceInfo,
+    // ip_address: ipAddress || 'unknown',
     status: 'pending',
-    delivery_type: 'delivery',
-    delivery_zone: extractDeliveryZone(customerInfo.address),
+    // delivery_type and delivery_zone columns differ from DB schema or are missing
+    // storing zone in address string is sufficient for now
   };
 
   const { data, error } = await supabase

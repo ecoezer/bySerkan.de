@@ -42,7 +42,7 @@ function HomePage() {
   const [showMobileCart, setShowMobileCart] = useState(false);
   const [cartAnimation, setCartAnimation] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [storeStatus, setStoreStatus] = useState<{ isOpen: boolean; message?: string; nextOpen?: string }>({ isOpen: true });
+  const [storeStatus, setStoreStatus] = useState<{ isOpen: boolean; message?: string; deliveryMessage?: string; nextOpen?: string; nextDeliveryOpen?: string }>({ isOpen: true });
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [showClosedModal, setShowClosedModal] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -381,6 +381,7 @@ function HomePage() {
           }
         }}
         nextOpenTime={storeStatus.nextOpen}
+        nextDeliveryTime={storeStatus.nextDeliveryOpen}
       />
 
       {notification && (

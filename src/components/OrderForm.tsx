@@ -83,7 +83,8 @@ const OrderForm: React.FC<OrderFormProps> = ({
     isOpen: boolean;
     isDeliveryOpen: boolean;
     isPickupOpen: boolean;
-    message?: string
+    message?: string;
+    deliveryMessage?: string;
   }>({
     isOpen: true,
     isDeliveryOpen: true,
@@ -115,7 +116,9 @@ const OrderForm: React.FC<OrderFormProps> = ({
     const checkStoreStatus = async () => {
       const settings = await getStoreSettings();
       const status = isStoreOpen(settings);
-      const nextSched = getNextAvailableSchedule(settings);
+
+      const currentType = watch('orderType');
+      const nextSched = getNextAvailableSchedule(settings, currentType);
 
       setStoreStatus(status);
       setSettings(settings);
@@ -123,7 +126,6 @@ const OrderForm: React.FC<OrderFormProps> = ({
       setDeliveryZones(settings.deliveryZones || []);
 
       // Auto-switch if selected type is disabled
-      const currentType = watch('orderType');
       if (status.isOpen) {
         if (currentType === 'delivery' && !status.isDeliveryOpen && status.isPickupOpen) {
           setValue('orderType', 'pickup');
@@ -150,11 +152,14 @@ const OrderForm: React.FC<OrderFormProps> = ({
       const nextSched = getNextAvailableSchedule(settings, watchOrderType);
       setNextSchedule(nextSched);
 
+      const currentSpecificTime = watch('specificTime');
+
       // If specific time is selected or forced, validate it/update it
-      if (nextSched && (!storeStatus.isOpen || watchDeliveryTime === 'specific') && !watch('specificTime')) {
-        // Only auto-set if empty, otherwise we might overwrite user input. 
-        // But for closed store forcing pre-order, we should ensure default is valid.
-        setValue('specificTime', nextSched.open);
+      if (nextSched && (!storeStatus.isOpen || watchDeliveryTime === 'specific')) {
+        // If empty, OR if current time is before the new open time (e.g. switching Pickup 11:00 -> Delivery 12:00)
+        if (!currentSpecificTime || (currentSpecificTime < nextSched.open)) {
+          setValue('specificTime', nextSched.open);
+        }
       }
     }
   }, [watchOrderType, settings, storeStatus.isOpen, watchDeliveryTime, setValue, watch]);
@@ -291,7 +296,7 @@ const OrderForm: React.FC<OrderFormProps> = ({
       await createOrder(orderItems as OrderItemType[], customerInfo, total);
 
       const whatsappMessage = generateWhatsAppMessage(data);
-      const whatsappUrl = `https://wa.me/+491781555888?text=${whatsappMessage}`;
+      const whatsappUrl = `https://wa.me/+4915771459166?text=${whatsappMessage}`;
 
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
@@ -400,7 +405,10 @@ const OrderForm: React.FC<OrderFormProps> = ({
           <Clock className="w-12 h-12 mx-auto text-red-500 mb-3" />
           <h3 className="text-xl font-bold text-red-700 mb-2">Geschlossen</h3>
           <p className="text-red-600 font-medium">{storeStatus.message}</p>
-          <p className="text-gray-600 mt-2 text-sm">Bestellungen sind derzeit nicht möglich.</p>
+          {storeStatus.deliveryMessage && (
+            <p className="text-red-600 font-medium">{storeStatus.deliveryMessage}</p>
+          )}
+          <p className="text-gray-600 mt-2 text-sm">Sie können derzeit nur vorbestellen.</p>
         </div>
       </div>
     );
@@ -649,11 +657,31 @@ const OrderForm: React.FC<OrderFormProps> = ({
             </div>
           </div>
 
-          {!canOrder && minOrderMessage && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-700 font-medium flex items-center gap-2">
+          {minOrderMessage && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+              <p className="text-sm text-red-600 font-medium flex items-center gap-2 mb-2">
                 ⚠️ {minOrderMessage}
               </p>
+              {watchOrderType === 'delivery' && watchDeliveryZone && (() => {
+                const zone = deliveryZones.find(z => z.id === watchDeliveryZone);
+                if (zone && zone.minOrder > 0) {
+                  const progress = Math.min((subtotal / zone.minOrder) * 100, 100);
+                  return (
+                    <div>
+                      <div className="w-full bg-red-200 rounded-full h-2.5 dark:bg-red-200 mb-2">
+                        <div
+                          className="bg-red-600 h-2.5 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-red-800 text-center font-medium">
+                        Noch {(zone.minOrder - subtotal).toFixed(2).replace('.', ',')} € bis zum Mindestbestellwert
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
         </div>

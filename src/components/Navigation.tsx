@@ -133,7 +133,7 @@ const Navigation = ({ sections = [] }: NavigationProps) => {
         <div className="flex items-center h-16">
 
           {/* Left Arrow */}
-          {isMobile && showLeftArrow && (
+          {showLeftArrow && (
             <div className="flex-shrink-0 pr-2">
               <button
                 onClick={() => scroll('left')}
@@ -148,7 +148,7 @@ const Navigation = ({ sections = [] }: NavigationProps) => {
           {/* Navigation Items */}
           <div
             ref={scrollContainerRef}
-            className="flex items-center justify-start gap-3 overflow-x-auto scrollbar-hide flex-1 lg:justify-center px-2 py-1"
+            className="flex items-center justify-start gap-3 overflow-x-auto scrollbar-hide flex-1 px-2 py-1"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -177,7 +177,7 @@ const Navigation = ({ sections = [] }: NavigationProps) => {
           </div>
 
           {/* Right Arrow */}
-          {isMobile && showRightArrow && (
+          {showRightArrow && (
             <div className="flex-shrink-0 pl-2">
               <button
                 onClick={() => scroll('right')}

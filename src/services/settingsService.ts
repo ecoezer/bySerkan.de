@@ -46,17 +46,27 @@ export interface StoreSettings {
 const STORE_ID = 'store';
 
 export const DEFAULT_SCHEDULE: WeekSchedule = {
-    monday: { isOpen: true, open: '11:00', close: '22:00' },
-    tuesday: { isOpen: true, open: '11:00', close: '22:00' },
-    wednesday: { isOpen: true, open: '11:00', close: '22:00' },
-    thursday: { isOpen: true, open: '11:00', close: '22:00' },
-    friday: { isOpen: true, open: '11:00', close: '23:00' },
+    monday: { isOpen: true, open: '12:00', close: '22:00' },
+    tuesday: { isOpen: true, open: '12:00', close: '22:00' },
+    wednesday: { isOpen: true, open: '12:00', close: '22:00' },
+    thursday: { isOpen: true, open: '12:00', close: '22:00' },
+    friday: { isOpen: true, open: '12:00', close: '23:00' },
+    saturday: { isOpen: true, open: '12:00', close: '23:00' },
+    sunday: { isOpen: true, open: '12:00', close: '22:00' },
+};
+
+export const DEFAULT_DELIVERY_SCHEDULE: WeekSchedule = {
+    monday: { isOpen: true, open: '12:00', close: '22:00' },
+    tuesday: { isOpen: true, open: '12:00', close: '22:00' },
+    wednesday: { isOpen: true, open: '12:00', close: '22:00' },
+    thursday: { isOpen: true, open: '12:00', close: '22:00' },
+    friday: { isOpen: true, open: '12:00', close: '23:00' },
     saturday: { isOpen: true, open: '12:00', close: '23:00' },
     sunday: { isOpen: true, open: '12:00', close: '22:00' },
 };
 
 export const DEFAULT_ZONES: DeliveryZone[] = [
-    { id: 'lutter', name: 'Lutter am Barenberge', zipCode: '38729', minOrder: 0, deliveryFee: 0 },
+    { id: 'lutter', name: 'Lutter am Barenberge', zipCode: '38729', minOrder: 15, deliveryFee: 0 },
     { id: 'ostlutter', name: 'Ostlutter', zipCode: '38729', minOrder: 20, deliveryFee: 0 },
     { id: 'wallmoden', name: 'Wallmoden', zipCode: '38729', minOrder: 20, deliveryFee: 0 },
     { id: 'alt-wallmoden', name: 'Alt Wallmoden', zipCode: '38729', minOrder: 20, deliveryFee: 0 },
@@ -75,12 +85,12 @@ export const DEFAULT_SETTINGS: StoreSettings = {
     pausedDateDelivery: null,
     pausedDatePickup: null,
     schedule: DEFAULT_SCHEDULE,
-    deliverySchedule: DEFAULT_SCHEDULE,
+    deliverySchedule: DEFAULT_DELIVERY_SCHEDULE,
     address: {
         street: 'Frankfurter Str. 7',
         zip: '38729',
         city: 'Lutter am Barenberge',
-        phone: '+491781555888'
+        phone: '+4915771459166'
     },
     deliveryZones: DEFAULT_ZONES
 };
@@ -117,7 +127,7 @@ export async function getStoreSettings(): Promise<StoreSettings> {
             pausedDateDelivery: data.paused_date_delivery,
             pausedDatePickup: data.paused_date_pickup,
             schedule: data.schedule,
-            deliverySchedule: data.delivery_schedule || DEFAULT_SCHEDULE,
+            deliverySchedule: data.delivery_schedule || DEFAULT_DELIVERY_SCHEDULE,
             address: data.address,
             deliveryZones: data.delivery_zones || DEFAULT_ZONES
         };
@@ -152,36 +162,11 @@ export function isStoreOpen(settings: StoreSettings): {
     isDeliveryOpen: boolean;
     isPickupOpen: boolean;
     message?: string;
-    nextOpen?: string
+    deliveryMessage?: string;
+    nextOpen?: string;
+    nextDeliveryOpen?: string;
 } {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-
-    // Determine effective status (Auto-Reset)
-    let isDeliveryAvailable = settings.isDeliveryAvailable ?? true;
-    let isPickupAvailable = settings.isPickupAvailable ?? true;
-
-    // If delivery is paused but the date is not today, it means it's an old pause -> Auto Reset to Open
-    if (!isDeliveryAvailable && settings.pausedDateDelivery && settings.pausedDateDelivery !== todayStr) {
-        isDeliveryAvailable = true;
-    }
-
-    // If pickup is paused but the date is not today -> Auto Reset to Open
-    if (!isPickupAvailable && settings.pausedDatePickup && settings.pausedDatePickup !== todayStr) {
-        isPickupAvailable = true;
-    }
-
-    // 1. Check if ANY service is available (based on effective status)
-    // If both are effective OFF, the store is closed
-    if (isDeliveryAvailable === false && isPickupAvailable === false) {
-        return {
-            isOpen: false,
-            isDeliveryOpen: false,
-            isPickupOpen: false,
-            message: 'Momentan keine Bestellannahme'
-        };
-    }
-
     const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
     const germanDays: Record<string, string> = {
         monday: 'Montag',
@@ -195,43 +180,96 @@ export function isStoreOpen(settings: StoreSettings): {
 
     const currentDayIndex = now.getDay();
     const currentDayName = days[currentDayIndex] as keyof WeekSchedule;
-    const daySchedule = settings.schedule[currentDayName];
-
     const currentTime = now.getHours() * 60 + now.getMinutes();
-    const [openHour, openMinute] = daySchedule.open.split(':').map(Number);
-    const openTime = openHour * 60 + openMinute;
-    const [closeHour, closeMinute] = daySchedule.close.split(':').map(Number);
-    const closeTime = closeHour * 60 + closeMinute;
+    const todayStr = now.toISOString().split('T')[0];
 
-    const getNextOpenTime = () => {
-        // Check next day
-        const nextDayIndex = (currentDayIndex + 1) % 7;
-        const nextDayName = days[nextDayIndex] as keyof WeekSchedule;
-        const nextDaySchedule = settings.schedule[nextDayName];
+    // Determine effective status (Auto-Reset)
+    let isDeliveryAvailable = settings.isDeliveryAvailable ?? true;
+    let isPickupAvailable = settings.isPickupAvailable ?? true;
 
-        if (nextDaySchedule.isOpen) {
-            return `Morgen ${nextDaySchedule.open} Uhr`;
+    if (!isDeliveryAvailable && settings.pausedDateDelivery && settings.pausedDateDelivery !== todayStr) {
+        isDeliveryAvailable = true;
+    }
+    if (!isPickupAvailable && settings.pausedDatePickup && settings.pausedDatePickup !== todayStr) {
+        isPickupAvailable = true;
+    }
+
+    if (isDeliveryAvailable === false && isPickupAvailable === false) {
+        return {
+            isOpen: false,
+            isDeliveryOpen: false,
+            isPickupOpen: false,
+            message: 'Momentan keine Bestellannahme'
+        };
+    }
+
+    // --- Helper to calculate next open time for a given schedule ---
+    const getNextTime = (schedule: WeekSchedule) => {
+        const daySchedule = schedule[currentDayName];
+        if (!daySchedule.isOpen) {
+            // Check next day
+            const nextDayIndex = (currentDayIndex + 1) % 7;
+            const nextDayName = days[nextDayIndex] as keyof WeekSchedule;
+            const nextDaySchedule = schedule[nextDayName];
+            if (nextDaySchedule.isOpen) return `Morgen ${nextDaySchedule.open} Uhr`;
+            return 'Demnächst';
         }
-        return 'Demnächst';
+
+        const [openHour, openMinute] = daySchedule.open.split(':').map(Number);
+        const openTime = openHour * 60 + openMinute;
+        const [closeHour, closeMinute] = daySchedule.close.split(':').map(Number);
+        const closeTime = closeHour * 60 + closeMinute;
+
+        if (currentTime < openTime) return `Heute ${daySchedule.open} Uhr`;
+        if (currentTime >= closeTime) {
+            // Check next day
+            const nextDayIndex = (currentDayIndex + 1) % 7;
+            const nextDayName = days[nextDayIndex] as keyof WeekSchedule;
+            const nextDaySchedule = schedule[nextDayName];
+            if (nextDaySchedule.isOpen) return `Morgen ${nextDaySchedule.open} Uhr`;
+            return 'Demnächst';
+        }
+        return `Heute ${daySchedule.open} Uhr`; // Should not reach here if open
     };
 
-    // 2. Check Schedule Constraints (Ruhetag, too early, too late)
+    // --- Check Main Schedule (Pickup) ---
+    const mainSchedule = settings.schedule[currentDayName];
+    const [openHour, openMinute] = mainSchedule.open.split(':').map(Number);
+    const openTime = openHour * 60 + openMinute;
+    const [closeHour, closeMinute] = mainSchedule.close.split(':').map(Number);
+    const closeTime = closeHour * 60 + closeMinute;
+
     let scheduleOpen = true;
     let message = '';
     let nextOpen = '';
 
-    if (!daySchedule.isOpen) {
+    if (!mainSchedule.isOpen) {
         scheduleOpen = false;
         message = `Heute (${germanDays[currentDayName]}) Ruhetag`;
-        nextOpen = getNextOpenTime();
+        nextOpen = getNextTime(settings.schedule);
     } else if (currentTime < openTime) {
         scheduleOpen = false;
-        message = `Heute geöffnet: ${daySchedule.open} - ${daySchedule.close} Uhr`;
-        nextOpen = `Heute ${daySchedule.open} Uhr`;
+        message = `Heute geöffnet: ${mainSchedule.open} - ${mainSchedule.close} Uhr`;
+        nextOpen = `Heute ${mainSchedule.open} Uhr`;
     } else if (currentTime >= closeTime) {
         scheduleOpen = false;
-        message = `Heute geöffnet: ${daySchedule.open} - ${daySchedule.close} Uhr`;
-        nextOpen = getNextOpenTime();
+        message = `Heute geöffnet: ${mainSchedule.open} - ${mainSchedule.close} Uhr`;
+        nextOpen = getNextTime(settings.schedule);
+    }
+
+    // --- Check Delivery Schedule ---
+    let nextDeliveryOpen = undefined;
+    let deliveryMessage = undefined;
+
+    if (settings.deliverySchedule) {
+        const todayDelivery = settings.deliverySchedule[currentDayName];
+        if (todayDelivery.isOpen) {
+            deliveryMessage = `Lieferzeit: ${todayDelivery.open} - ${todayDelivery.close} Uhr`;
+        }
+    }
+
+    if (!scheduleOpen && settings.deliverySchedule) {
+        nextDeliveryOpen = getNextTime(settings.deliverySchedule);
     }
 
     if (!scheduleOpen) {
@@ -240,11 +278,12 @@ export function isStoreOpen(settings: StoreSettings): {
             isDeliveryOpen: false,
             isPickupOpen: false,
             message,
-            nextOpen
+            deliveryMessage,
+            nextOpen,
+            nextDeliveryOpen
         };
     }
 
-    // 3. If Schedule is Open, return specific availabilities (using effective status)
     return {
         isOpen: true,
         isDeliveryOpen: isDeliveryAvailable,

@@ -6,9 +6,10 @@ interface StoreClosedModalProps {
     onClose: () => void;
     onPreOrder?: () => void;
     nextOpenTime?: string;
+    nextDeliveryTime?: string;
 }
 
-export const StoreClosedModal: React.FC<StoreClosedModalProps> = ({ isOpen, onClose, onPreOrder, nextOpenTime }) => {
+export const StoreClosedModal: React.FC<StoreClosedModalProps> = ({ isOpen, onClose, onPreOrder, nextOpenTime, nextDeliveryTime }) => {
     if (!isOpen) return null;
 
     return (
@@ -37,11 +38,30 @@ export const StoreClosedModal: React.FC<StoreClosedModalProps> = ({ isOpen, onCl
 
                 {/* Content */}
                 <div className="p-8 text-center space-y-4">
-                    <div className="bg-red-50 rounded-xl p-6 border border-red-100">
-                        <p className="text-gray-600 mb-2 font-medium">Wir öffnen wieder am:</p>
-                        <p className="text-2xl font-bold text-red-600">
-                            {nextOpenTime || 'Demnächst'}
-                        </p>
+                    <div className="bg-red-50 rounded-xl p-6 border border-red-100 space-y-4">
+                        <div>
+                            <p className="text-gray-600 mb-1 font-medium text-sm border-b border-red-200 pb-1 inline-block">Öffnungszeit / Abholung</p>
+                            <p className="text-xl font-bold text-red-600">
+                                {nextOpenTime || 'Demnächst'}
+                            </p>
+                        </div>
+
+                        {nextDeliveryTime && nextDeliveryTime !== nextOpenTime && (
+                            <div>
+                                <p className="text-gray-600 mb-1 font-medium text-sm border-b border-red-200 pb-1 inline-block">Lieferservice</p>
+                                <p className="text-xl font-bold text-red-600">
+                                    {nextDeliveryTime}
+                                </p>
+                            </div>
+                        )}
+                        {nextDeliveryTime && nextDeliveryTime === nextOpenTime && (
+                            <div>
+                                <p className="text-gray-600 mb-1 font-medium text-sm border-b border-red-200 pb-1 inline-block">Lieferservice</p>
+                                <p className="text-xl font-bold text-red-600">
+                                    {nextDeliveryTime}
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <p className="text-gray-500 leading-relaxed text-sm">

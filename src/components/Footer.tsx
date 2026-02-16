@@ -50,7 +50,9 @@ const Footer = () => {
         <div className="bg-white/60 rounded-xl p-3 hover:bg-white/80 transition-colors">
           <div className="flex justify-center mb-1">
             <div className="p-1.5 bg-orange-100 rounded-full">
-              <MapPin className="h-3.5 w-3.5 text-orange-600" />
+              <a href="tel:+4915771459166" className="text-gray-400 hover:text-white transition-colors">
+                +49 157 71459166
+              </a>
             </div>
           </div>
           <div className="font-bold text-gray-800 text-sm">🏠 {settings.address?.street?.toUpperCase() || 'FRANKFURTER STR. 7'}</div>
