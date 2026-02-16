@@ -22,12 +22,12 @@ export const usePopularItems = () => {
         const sorted = allItems.map(item => {
             let count = item.orderCount || 0;
             if (popularIds.includes(item.number)) {
-                count += 1000; // Boost popular items for demo
+                count += 1000;
             }
             return { ...item, _sortCount: count };
         })
-            .sort((a, b) => b._sortCount - a._sortCount)
-            .slice(0, 6) // Top 6
+            .slice(0, 6)
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             .map(({ _sortCount, ...item }) => item);
 
         setPopularItems(sorted);

@@ -12,7 +12,8 @@ import MonitorLogin from './pages/MonitorLogin';
 import OrderMonitor from './pages/OrderMonitor';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import { AudioProvider } from './context/AudioContext';
 import { ProtectedAdminRoute } from './components/ProtectedAdminRoute';
 

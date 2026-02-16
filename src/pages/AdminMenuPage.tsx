@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit2, Trash2, Copy, GripVertical } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-// @ts-ignore
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Notification } from '../components/Notification';
 import { ConfirmationModal } from '../components/ConfirmationModal';
@@ -24,6 +23,7 @@ interface MenuItem {
     number: number;
     allergens?: string;
     order?: number;
+    category_slug?: string;
 }
 
 const AdminMenuPage: React.FC = () => {
@@ -48,16 +48,12 @@ const AdminMenuPage: React.FC = () => {
     } | null>(null);
     const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-    const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    const showNotification = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 3000);
-    };
-
-    useEffect(() => {
-        fetchData();
     }, []);
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         try {
             setLoading(true);
 
@@ -68,9 +64,9 @@ const AdminMenuPage: React.FC = () => {
                 .order('order');
 
             if (catError) throw catError;
-            setCategories(cats);
+            setCategories(cats || []);
 
-            if (cats.length > 0 && !selectedCategory) {
+            if (cats && cats.length > 0 && !selectedCategory) {
                 setSelectedCategory(cats[0].id);
             }
 
@@ -91,7 +87,11 @@ const AdminMenuPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedCategory, showNotification]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
     const handleSaveCategory = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -113,7 +113,7 @@ const AdminMenuPage: React.FC = () => {
                     return crypto.randomUUID();
                 }
                 return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-                    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
                     return v.toString(16);
                 });
             };
@@ -144,9 +144,9 @@ const AdminMenuPage: React.FC = () => {
             setEditingCategory(null);
             setIsAddingCategory(false);
             fetchData();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error saving category:', error);
-            showNotification('Fehler beim Speichern der Kategorie: ' + error.message, 'error');
+            showNotification('Fehler beim Speichern der Kategorie: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         }
     };
 
@@ -189,9 +189,9 @@ const AdminMenuPage: React.FC = () => {
             setEditingItem(null);
             setIsAddingItem(false);
             fetchData();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error saving item:', error);
-            showNotification('Fehler beim Speichern des Artikels: ' + error.message, 'error');
+            showNotification('Fehler beim Speichern des Artikels: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         }
     };
 
@@ -228,7 +228,6 @@ const AdminMenuPage: React.FC = () => {
         try {
             if (confirmAction.type === 'delete-category' && confirmAction.categoryId) {
                 // Delete items first (or count on CASCADE if set up, but let's be explicit if needed)
-                // In Supabase we should have set up cascade, but if not:
                 await supabase.from('menu_items').delete().eq('category_id', confirmAction.categoryId);
                 await supabase.from('categories').delete().eq('id', confirmAction.categoryId);
                 showNotification('Kategorie gelöscht');
@@ -236,6 +235,7 @@ const AdminMenuPage: React.FC = () => {
                 await supabase.from('menu_items').delete().eq('id', confirmAction.itemId);
                 showNotification('Artikel gelöscht');
             } else if (confirmAction.type === 'duplicate-item' && confirmAction.item) {
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { id, ...itemData } = confirmAction.item;
                 await supabase.from('menu_items').insert({
                     ...itemData,
@@ -244,9 +244,9 @@ const AdminMenuPage: React.FC = () => {
                 showNotification('Artikel dupliziert');
             }
             fetchData();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error executing action:', error);
-            showNotification('Fehler bei der Aktion: ' + error.message, 'error');
+            showNotification('Fehler bei der Aktion: ' + (error instanceof Error ? error.message : 'Unknown error'), 'error');
         } finally {
             setConfirmAction(null);
         }

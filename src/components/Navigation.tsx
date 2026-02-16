@@ -8,7 +8,6 @@ interface NavigationProps {
 
 const Navigation = ({ sections = [] }: NavigationProps) => {
   const [activeSection, setActiveSection] = useState('');
-  const [isMobile, setIsMobile] = useState(false);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -18,18 +17,7 @@ const Navigation = ({ sections = [] }: NavigationProps) => {
     if (sections.length > 0 && !activeSection) {
       setActiveSection(sections[0].id);
     }
-  }, [sections]);
-
-  // Mobile detection
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [sections, activeSection]);
 
   // Check scroll position and update arrow visibility
   const updateArrowVisibility = () => {

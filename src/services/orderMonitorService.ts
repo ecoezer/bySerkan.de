@@ -11,7 +11,7 @@ type OrderCallback = (orders: MonitorOrder[]) => void;
 type NewOrderCallback = (order: MonitorOrder) => void;
 
 class OrderMonitorService {
-  private channel: any = null;
+  private channel: ReturnType<typeof supabase.channel> | null = null;
   private seenOrderIds = new Set<string>();
   private isFirstLoad = true;
 
@@ -30,7 +30,8 @@ class OrderMonitorService {
         return;
       }
 
-      const orders = data.map(this.mapRowToOrder);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const orders = (data as any[]).map(this.mapRowToOrder);
 
       if (this.isFirstLoad) {
         orders.forEach(o => this.seenOrderIds.add(o.id));
@@ -48,9 +49,10 @@ class OrderMonitorService {
       .on(
         'postgres_changes',
         { event: '*', table: 'orders', schema: 'public' },
-        async (payload: any) => {
+        async (payload) => {
           if (payload.eventType === 'INSERT') {
-            const newOrder = this.mapRowToOrder(payload.new);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const newOrder = this.mapRowToOrder(payload.new as any);
             if (!this.seenOrderIds.has(newOrder.id)) {
               this.seenOrderIds.add(newOrder.id);
               if (newOrder.monitorStatus === 'new') {
@@ -65,6 +67,8 @@ class OrderMonitorService {
       .subscribe();
   }
 
+  // Use explicit type for row, but we need to cast input from Supabase which is generic
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private mapRowToOrder(row: any): MonitorOrder {
     return {
       id: row.id,
@@ -72,7 +76,8 @@ class OrderMonitorService {
       customerAddress: row.customer_address,
       customerPhone: row.customer_phone,
       note: row.note,
-      items: row.items.map((item: any) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items: (row.items || []).map((item: any) => ({
         menuItem: {
           id: item.menuItemId,
           number: item.menuItemNumber,

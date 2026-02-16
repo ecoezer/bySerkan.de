@@ -1,26 +1,5 @@
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-
-interface AudioContextType {
-    isPlaying: boolean;
-    isMuted: boolean;
-    volume: number;
-    error: string | null;
-    play: () => Promise<void>;
-    stop: () => void;
-    toggleMute: () => void;
-    setVolume: (volume: number) => void;
-    testAudio: () => Promise<void>;
-}
-
-const AudioContext = createContext<AudioContextType | null>(null);
-
-export const useAudio = () => {
-    const context = useContext(AudioContext);
-    if (!context) {
-        throw new Error('useAudio must be used within an AudioProvider');
-    }
-    return context;
-};
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { AudioContext } from './AudioContextDefinition';
 
 export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -110,12 +89,6 @@ export const AudioProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const testAudio = useCallback(async () => {
         if (!audioRef.current) return;
 
-        // Create a temporary audio instance for testing so we don't disrupt the main loop state
-        // or we can just play the main one briefly. 
-        // Let's play the main one briefly to ensure THAT one works.
-
-        // But if we are already playing (looping for an order), testing might be weird.
-        // Let's just create a one-off for testing.
         try {
             const testSound = new Audio('/doordash.mp3');
             testSound.volume = volume;

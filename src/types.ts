@@ -94,3 +94,39 @@ export interface Order {
   deliveryType?: 'pickup' | 'delivery';
   deliveryZone?: string;
 }
+
+export interface RawOrderItem {
+  menuItemId: string;
+  menuItemName: string;
+  menuItemNumber: string;
+  menuItemPrice?: number;
+  menuItemIsMeatSelection?: boolean;
+  menuItemIsPizza?: boolean;
+  menuItemIsPasta?: boolean;
+  quantity: number;
+  selectedSize?: PizzaSize;
+  selectedIngredients?: string[];
+  selectedExtras?: string[];
+  selectedPastaType?: string;
+  selectedSauce?: string;
+  selectedSideDish?: string;
+  selectedExclusions?: string[];
+}
+
+export interface SupabaseOrderRow {
+  id: string;
+  created_at: string;
+  customer_name: string;
+  customer_address: string;
+  customer_phone: string;
+  note?: string;
+  items: RawOrderItem[];
+  total_amount: number;
+  status: Order['status'];
+  delivery_type?: 'pickup' | 'delivery';
+  delivery_zone?: string;
+  device_info?: Order['deviceInfo'];
+  ip_address?: string;
+  monitor_status?: 'new' | 'accepted' | 'closed';
+  updated_at?: string;
+}

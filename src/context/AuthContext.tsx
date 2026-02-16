@@ -1,18 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-
-interface AuthContextType {
-    currentUser: User | null;
-    loading: boolean;
-}
-
-const AuthContext = createContext<AuthContextType>({
-    currentUser: null,
-    loading: true,
-});
-
-export const useAuth = () => useContext(AuthContext);
+import { AuthContext } from './AuthContextDefinition';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -11,7 +11,7 @@ import {
   Clock,
   MapPin
 } from 'lucide-react';
-import { getAllOrders } from '../services/orderService';
+import { supabase } from '../lib/supabase';
 import type { Order } from '../types';
 
 type TimePeriod = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'all';
@@ -42,70 +42,7 @@ const AnalyticsDashboard: React.FC = () => {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>('all');
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
-
-  useEffect(() => {
-    filterOrdersByPeriod();
-  }, [orders, selectedPeriod]);
-
-  const loadOrders = async () => {
-    try {
-      setLoading(true);
-      const fetchedOrders = await getAllOrders();
-      setOrders(fetchedOrders);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filterOrdersByPeriod = () => {
-    const now = new Date();
-    let filtered: Order[] = [];
-
-    switch (selectedPeriod) {
-      case 'today':
-        filtered = orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
-          return orderDate.toDateString() === now.toDateString();
-        });
-        break;
-      case 'yesterday':
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        filtered = orders.filter(order => {
-          const orderDate = new Date(order.createdAt);
-          return orderDate.toDateString() === yesterday.toDateString();
-        });
-        break;
-      case 'week':
-        const weekAgo = new Date(now);
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        filtered = orders.filter(order => new Date(order.createdAt) >= weekAgo);
-        break;
-      case 'month':
-        const monthAgo = new Date(now);
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        filtered = orders.filter(order => new Date(order.createdAt) >= monthAgo);
-        break;
-      case 'year':
-        const yearAgo = new Date(now);
-        yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-        filtered = orders.filter(order => new Date(order.createdAt) >= yearAgo);
-        break;
-      case 'all':
-        filtered = orders;
-        break;
-    }
-
-    setFilteredOrders(filtered);
-    calculateAnalytics(filtered);
-  };
-
-  const calculateAnalytics = (ordersList: Order[]) => {
+  const calculateStats = useCallback((ordersList: Order[]) => {
     const totalRevenue = ordersList.reduce((sum, order) => sum + order.totalAmount, 0);
     const totalOrders = ordersList.length;
     const averageOrder = totalOrders > 0 ? totalRevenue / totalOrders : 0;
@@ -223,7 +160,103 @@ const AnalyticsDashboard: React.FC = () => {
       deliveryZones,
       dailyTrend
     });
-  };
+  }, []);
+
+  const filterOrdersByPeriod = useCallback(() => {
+    if (!orders.length) return;
+
+    let filtered = [];
+    let start: Date | null = null;
+    let end: Date | null = null;
+    const now = new Date();
+
+    switch (selectedPeriod) {
+      case 'today':
+        start = new Date(now.setHours(0, 0, 0, 0));
+        end = new Date(now.setHours(23, 59, 59, 999));
+        break;
+      case 'yesterday': {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        start = new Date(yesterday.setHours(0, 0, 0, 0));
+        end = new Date(yesterday.setHours(23, 59, 59, 999));
+        break;
+      }
+      case 'week': {
+        const current = new Date();
+        const first = current.getDate() - current.getDay() + 1;
+        start = new Date(current.setDate(first));
+        start.setHours(0, 0, 0, 0);
+        end = new Date();
+        break;
+      }
+      case 'month':
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+        end = new Date();
+        break;
+      case 'year':
+        start = new Date(now.getFullYear(), 0, 1);
+        end = new Date();
+        break;
+      case 'all':
+        filtered = orders;
+        break;
+    }
+
+    if (selectedPeriod !== 'all' && start && end) {
+      filtered = orders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= start! && orderDate <= end!;
+      });
+    }
+
+    setFilteredOrders(filtered);
+    calculateStats(filtered);
+  }, [orders, selectedPeriod, calculateStats]);
+
+  useEffect(() => {
+    const loadOrders = async () => {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('orders')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Map Supabase data to Order interface
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mappedOrders: Order[] = (data || []).map((row: any) => ({
+          id: row.id,
+          items: row.items,
+          totalAmount: parseFloat(row.total_amount),
+          status: row.status,
+          deliveryType: row.delivery_type || 'delivery',
+          deliveryZone: row.delivery_zone,
+          createdAt: new Date(row.created_at),
+          customerName: row.customer_name,
+          customerAddress: row.customer_address,
+          customerPhone: row.customer_phone,
+          note: row.note,
+          deviceInfo: row.device_info || {},
+          ipAddress: row.ip_address
+        }));
+
+        setOrders(mappedOrders);
+      } catch (error) {
+        console.error('Error loading analytics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOrders();
+  }, []);
+
+  useEffect(() => {
+    filterOrdersByPeriod();
+  }, [filterOrdersByPeriod]);
 
   const exportToCSV = () => {
     if (filteredOrders.length === 0) return;

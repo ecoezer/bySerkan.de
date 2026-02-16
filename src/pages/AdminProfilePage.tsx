@@ -36,9 +36,9 @@ const AdminProfilePage: React.FC = () => {
             setNotification({ message: 'Passwort erfolgreich geändert!', type: 'success' });
             setNewPassword('');
             setConfirmPassword('');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Password change error:', error);
-            setNotification({ message: 'Fehler beim Ändern des Passworts: ' + error.message, type: 'error' });
+            setNotification({ message: 'Fehler beim Ändern des Passworts: ' + (error instanceof Error ? error.message : 'Unknown error'), type: 'error' });
         } finally {
             setLoading(false);
         }

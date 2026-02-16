@@ -103,8 +103,7 @@ const AdminSettingsPage: React.FC = () => {
         try {
             await updateStoreSettings(settings);
             setNotification({ message: 'Einstellungen erfolgreich gespeichert!', type: 'success' });
-        } catch (error) {
-            console.error('Failed to save settings', error);
+        } catch {
             setNotification({ message: 'Fehler beim Speichern', type: 'error' });
         } finally {
             setSaving(false);
@@ -172,7 +171,7 @@ const AdminSettingsPage: React.FC = () => {
                 message: result.message,
                 type: result.success ? 'success' : 'error'
             });
-        } catch (error) {
+        } catch {
             setNotification({ message: 'Reparatur fehlgeschlagen', type: 'error' });
         } finally {
             setLoading(false);

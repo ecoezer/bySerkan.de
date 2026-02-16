@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Phone, Heart } from 'lucide-react';
+import { Phone, Heart } from 'lucide-react';
 import { getStoreSettings, StoreSettings, DEFAULT_SETTINGS } from '../services/settingsService';
 
 const Footer = () => {

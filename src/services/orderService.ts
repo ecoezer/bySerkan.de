@@ -4,66 +4,19 @@ import { getMenuItemPrice } from '../utils/menuPriceHelper';
 
 const ORDERS_TABLE = 'orders';
 
-const detectDeviceType = (): 'mobile' | 'desktop' => {
-  const ua = navigator.userAgent;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ? 'mobile' : 'desktop';
-};
-
-const detectBrowser = (): string => {
-  const ua = navigator.userAgent;
-  if (ua.indexOf('Firefox') > -1) return 'Firefox';
-  if (ua.indexOf('SamsungBrowser') > -1) return 'Samsung Internet';
-  if (ua.indexOf('Opera') > -1 || ua.indexOf('OPR') > -1) return 'Opera';
-  if (ua.indexOf('Trident') > -1) return 'Internet Explorer';
-  if (ua.indexOf('Edge') > -1) return 'Edge';
-  if (ua.indexOf('Chrome') > -1) return 'Chrome';
-  if (ua.indexOf('Safari') > -1) return 'Safari';
-  return 'Unknown';
-};
-
-const detectOS = (): string => {
-  const ua = navigator.userAgent;
-  if (ua.indexOf('Windows') > -1) return 'Windows';
-  if (ua.indexOf('Mac') > -1) return 'macOS';
-  if (ua.indexOf('Linux') > -1) return 'Linux';
-  if (ua.indexOf('Android') > -1) return 'Android';
-  if (ua.indexOf('iOS') > -1 || ua.indexOf('iPhone') > -1 || ua.indexOf('iPad') > -1) return 'iOS';
-  return 'Unknown';
-};
-
-/*
-const extractDeliveryZone = (address: string): string => {
-  const match = address.match(/\d{5}/);
-  if (match) {
-    return match[0];
-  }
-  const parts = address.split(',');
-  return parts[parts.length - 1]?.trim() || 'Unknown';
-};
-*/
-
 export async function createOrder(
   items: OrderItem[],
   customerInfo: CustomerInfo,
   totalAmount: number
 ): Promise<string> {
-  const deviceInfo = {
-    userAgent: navigator.userAgent,
-    screenResolution: `${window.screen.width}x${window.screen.height}`,
-    language: navigator.language,
-    platform: navigator.platform,
-    deviceType: detectDeviceType(),
-    browser: detectBrowser(),
-    os: detectOS(),
-  };
-
-  let ipAddress: string | undefined;
+  // let ipAddress: string | undefined; // Declare ipAddress if it were to be used
   try {
-    const ipResponse = await fetch('https://api.ipify.org?format=json');
-    const ipData = await ipResponse.json();
-    ipAddress = ipData.ip;
+    // Optional: Fetch IP address if needed, or remove completely if not used.
+    // const ipResponse = await fetch('https://api.ipify.org?format=json');
+    // const ipData = await ipResponse.json();
+    // ipAddress = ipData.ip;
   } catch (error) {
-    console.error('Failed to fetch IP address:', error);
+    console.warn('Failed to fetch IP address:', error);
   }
 
   const orderData = {
@@ -115,25 +68,10 @@ export async function getAllOrders(): Promise<Order[]> {
 
   if (error) throw error;
 
-  return data.map((row: any) => {
-    interface RawOrderItem {
-      menuItemId: string;
-      menuItemName: string;
-      menuItemNumber: string;
-      menuItemPrice?: number;
-      menuItemIsMeatSelection?: boolean;
-      menuItemIsPizza?: boolean;
-      menuItemIsPasta?: boolean;
-      quantity: number;
-      selectedSize?: string;
-      selectedIngredients?: string[];
-      selectedExtras?: string[];
-      selectedPastaType?: string;
-      selectedSauce?: string;
-      selectedSideDish?: string;
-      selectedExclusions?: string[];
-    }
-    const items = row.items.map((item: RawOrderItem) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data || []).map((row: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const items = row.items.map((item: any) => {
       const price = item.menuItemPrice || getMenuItemPrice(parseInt(item.menuItemId), item.menuItemName);
 
       return {
