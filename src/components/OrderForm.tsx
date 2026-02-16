@@ -140,14 +140,24 @@ const OrderForm: React.FC<OrderFormProps> = ({
     let canOrder = true;
     let minOrderMessage = '';
 
-    if (watchOrderType === 'delivery' && watchDeliveryZone) {
-      const zone = deliveryZones.find(z => z.id === watchDeliveryZone);
-      if (zone) {
-        deliveryFee = zone.deliveryFee;
-        if (subtotal < zone.minOrder) {
-          canOrder = false;
-          minOrderMessage = `Mindestbestellwert für ${zone.name}: ${zone.minOrder.toFixed(2).replace('.', ',')} €`;
+    if (watchOrderType === 'delivery') {
+      let effectiveMinOrder = 15.00;
+      let regionName = 'Lieferung';
+
+      if (watchDeliveryZone) {
+        const zone = deliveryZones.find(z => z.id === watchDeliveryZone);
+        if (zone) {
+          deliveryFee = zone.deliveryFee;
+          regionName = zone.name;
+          if (zone.minOrder > effectiveMinOrder) {
+            effectiveMinOrder = zone.minOrder;
+          }
         }
+      }
+
+      if (subtotal < effectiveMinOrder) {
+        canOrder = false;
+        minOrderMessage = `Mindestbestellwert für ${regionName}: ${effectiveMinOrder.toFixed(2).replace('.', ',')} €`;
       }
     }
 

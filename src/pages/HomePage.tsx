@@ -196,12 +196,16 @@ function HomePage() {
         <div className="bg-white py-3">
           <div className="mx-auto px-4 lg:pr-80 flex items-center gap-4">
             {!isSearchFocused && (
-              <div className="flex items-center gap-3 transition-all duration-300 pr-4">
+              <div className="inline-flex flex-col items-center justify-center transition-all duration-300 pr-4 w-min">
                 <img
                   src="/logo.png"
                   alt="Logo"
                   className={`${isMobile ? 'h-8' : 'h-10'} w-auto object-contain`}
                 />
+                <div className={`w-full flex justify-between items-center ${isMobile ? 'text-[0.5rem]' : 'text-[0.65rem]'} font-bold text-gray-600 mt-0.5 leading-none uppercase tracking-widest`}>
+                  <span>Gronau</span>
+                  <span>(Leine)</span>
+                </div>
               </div>
             )}
             <div className={`flex-1 transition-all duration-300 ${isSearchFocused ? 'w-full' : ''}`}>
