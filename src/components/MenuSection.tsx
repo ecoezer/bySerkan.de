@@ -156,7 +156,7 @@ const PriceDisplay: React.FC<{ item: MenuItem; specialRippchen: boolean; special
       </>
     );
   }
-  return <div>{item.price.toFixed(2).replace('.', ',')} €</div>;
+  return <div className="text-xl font-bold text-orange-600">{item.price.toFixed(2).replace('.', ',')} €</div>;
 };
 
 export default MenuSection;
